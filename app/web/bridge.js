@@ -204,7 +204,7 @@
   function unpaired(other) {
     // Disconnected (another iPad was paired, or Remove on the PC): forget the shows, the settings and the Google sign-in
     if (sync) sync.stop();
-    Object.keys(mem).forEach(function (k) { if (k !== 'unpaired') persist(k, undefined); });
+    Object.keys(mem).forEach(function (k) { if (k !== 'unpaired' && k !== 'homeSkip') persist(k, undefined); });
     persist('unpaired', { by: other ? other.name : '', removed: !other, at: Date.now() });
     flushed().then(function () { location.reload(); });
   }

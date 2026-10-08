@@ -41,6 +41,9 @@
     css();
     var app = document.getElementById('app');
     if (!root) { root = document.createElement('div'); root.id = 'sc-setup'; app.innerHTML = ''; app.appendChild(root); }
+    // Opened in Safari/Chrome (not from the Home Screen): first ask to add SitCraft to the Home Screen — the Home Screen app
+    // keeps its own storage, so setting up in the browser would only have to be done again there.
+    if (!W.standalone() && !mem.homeSkip && S.step === 1 && !S.busy) { root.innerHTML = homeCard(); root.querySelector('[data-a="here"]').onclick = function () { W.persist('homeSkip', { at: Date.now() }); render(); }; return; }
     var st = function (n) { return S.step > n ? 'done' : (S.step === n ? 'cur' : 'todo'); };
     var c = S.ctl, h = '<div class="card"><div><h1>Set up SitCraft on this iPad</h1><div class="sub">Your shows come from your own Google Drive. Your PC stays the home base.</div></div>';
     if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + ' Set it up again to use it.</div>';
@@ -62,6 +65,18 @@
     var ci = document.getElementById('sc-code'); if (ci) ci.oninput = function () { S.code = ci.value; };
     var ni = document.getElementById('sc-name'); if (ni) ni.oninput = function () { S.name = ni.value; };
     if (S.scanning) startCamera();
+  }
+  function homeCard() {
+    var ua = navigator.userAgent || '', chrome = /CriOS|EdgiOS|FxiOS/.test(ua), name = /EdgiOS/.test(ua) ? 'Edge' : (/FxiOS/.test(ua) ? 'Firefox' : (chrome ? 'Chrome' : 'Safari'));
+    var share = '<b>Share</b> button (a square with an arrow pointing up)';
+    var steps = chrome ?
+      [['Tap the ' + share, 'It’s at the right end of the address bar. (No Share button? Tap ⋯ and choose <b>Share…</b>.)'], ['Scroll down and tap <b>Add to Home Screen</b>', 'It’s in the list of actions under the row of apps.'], ['Tap <b>Add</b>', 'The SitCraft icon appears on your Home Screen.'], ['Open SitCraft from the new icon', 'Set it up there — sign in and scan the code from your PC.']] :
+      [['Tap the ' + share, 'It’s at the top of the screen, next to the address bar.'], ['Tap <b>Add to Home Screen</b>', 'Scroll down the list if you don’t see it.'], ['Tap <b>Add</b>', 'The SitCraft icon appears on your Home Screen.'], ['Open SitCraft from the new icon', 'Set it up there — sign in and scan the code from your PC.']];
+    var h = '<div class="card"><div><h1>First, add SitCraft to your Home Screen</h1><div class="sub">SitCraft then opens like an app: full screen with no browser bars, it works without internet, and your work is kept safe on this iPad. (A Home Screen app keeps its own storage, so set it up there rather than here in ' + name + '.)</div></div>';
+    if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + '</div>';
+    steps.forEach(function (x, i) { h += stepBox(i + 1, x[0], '<div class="s">' + x[1] + '</div>', i === 0 ? 'cur' : 'todo'); });
+    h += '<div class="row" style="justify-content:flex-end"><button data-a="here" style="font-size:14px;min-height:44px;color:#9a9ca3;border-color:#2a2e36">Set up here in ' + name + ' instead</button></div></div>';
+    return h;
   }
   function set(p) { Object.assign(S, p); render(); }
   function act(a) {
