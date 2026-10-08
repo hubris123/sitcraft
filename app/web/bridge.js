@@ -47,6 +47,16 @@
   }
   var flushed = function () { return pending; };
 
+  // ---------------- Sign-in log: why the "tap to reconnect" bar appears (App settings → iPad shows it) ----------------
+  function logSign(ev, x) {
+    var L = (mem.signLog || []).concat([Object.assign({ at: Date.now(), ev: ev }, x || {})]);
+    persist('signLog', L.slice(-40));
+  }
+  var expLogged = '';
+  function gotPass(t, how) {
+    var mins = Math.round((t.exp - Date.now()) / 60000);
+    return function (email) { logSign('got', { how: how, mins: mins, email: email || '' }); };
+  }
   // ---------------- Google sign-in (token lasts about an hour; signing in again needs a tap) ----------------
   var tokenClient = null, signWaiters = null;
   function gisReady() {
@@ -65,11 +75,13 @@
             if (!r || !r.access_token) { if (done) done({ ok: false, error: (r && (r.error_description || r.error)) || 'Sign-in didn’t finish' }); return; }
             var t = { tok: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
             persist('gtoken', t);
+            var lg = gotPass(t, 'pop-up');
             fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
               if (u && u.email) { t.email = u.email; persist('gtoken', t); }
+              lg(t.email);
               if (done) done({ ok: true, email: t.email });
               if (sync) sync.tick();
-            }, function () { if (done) done({ ok: true, email: t.email }); });
+            }, function () { lg(t.email); if (done) done({ ok: true, email: t.email }); });
           },
           error_callback: function (e) { var done = signWaiters; signWaiters = null; if (done) done({ ok: false, error: (e && (e.message || e.type)) || 'The sign-in window was closed or blocked' }); }
         });
@@ -103,26 +115,32 @@
     if (!P.access_token) return Promise.resolve({ ok: false, error: P.error === 'access_denied' ? 'Sign-in was cancelled' : (P.error_description || P.error || 'Sign-in didn’t finish') });
     var t = { tok: P.access_token, exp: Date.now() + (Number(P.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
     persist('gtoken', t);
+    var lg = gotPass(t, 'sign in another way');
     return fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
       if (u && u.email) { t.email = u.email; persist('gtoken', t); }
+      lg(t.email);
       return { ok: true, email: t.email, redirect: true };
-    }, function () { return { ok: true, email: t.email, redirect: true }; });
+    }, function () { lg(t.email); return { ok: true, email: t.email, redirect: true }; });
   }
   function token() {
     var t = mem.gtoken;
     if (t && t.tok && t.exp > Date.now() + 60000) return t.tok;
+    if (t && t.tok && t.exp && expLogged !== t.tok) { expLogged = t.tok; logSign('expired', {}); }
     throw Object.assign(new Error('Google sign-in needed'), { code: 'drive_auth' });
   }
   var tokenOk = function () { try { token(); return true; } catch (e) { return false; } };
 
   // ---------------- Google Drive over https ----------------
-  function gcall(url, opts) {
+  function gcall(url, opts, again) {
     var tok; try { tok = token(); } catch (e) { return Promise.reject(e); }
     opts = opts || {};
+    var where = String(url).replace(/^https:\/\/[^/]+/, '').split('?')[0].slice(0, 40);
     return fetch(url, Object.assign({}, opts, { headers: Object.assign({ authorization: 'Bearer ' + tok }, opts.headers || {}) })).then(function (r) {
-      if (r.ok) return r;
+      if (r.ok) { if (again) logSign('retryOk', { where: where }); return r; }
+      // Google sometimes says "not signed in" for a moment: wait and try once more before giving up on the pass
+      if (r.status === 401 && !again) return new Promise(function (res) { setTimeout(res, 1500); }).then(function () { return gcall(url, opts, true); });
       return r.text().then(function (t) {
-        if (r.status === 401) { var g = mem.gtoken; if (g) persist('gtoken', Object.assign({}, g, { exp: 0 })); }
+        if (r.status === 401) { var g = mem.gtoken; logSign('drive401', { where: where, mins: g && g.exp ? Math.round((g.exp - Date.now()) / 60000) : null }); if (g) persist('gtoken', Object.assign({}, g, { exp: 0 })); try { window.dispatchEvent(new Event('sc-signin-lost')); } catch (e) {} }
         throw Object.assign(new Error('Google Drive error ' + r.status + ' ' + String(t).slice(0, 160)), { status: r.status, code: r.status === 404 ? 'not_found' : (r.status === 401 ? 'drive_auth' : 'drive_error') });
       });
     });
@@ -278,7 +296,7 @@
       sendReset: function () { return Promise.resolve(NOT_ON_IPAD); }, useReset: function () { return Promise.resolve(NOT_ON_IPAD); }
     },
     drive: {
-      status: function () { return { connected: tokenOk(), email: (mem.gtoken && mem.gtoken.email) || '', clientId: '', builtIn: true }; },
+      status: function () { var g = mem.gtoken || {}; return { connected: tokenOk(), email: g.email || '', clientId: '', builtIn: true, exp: g.exp || 0, signLog: (mem.signLog || []).slice(-10) }; },
       connect: function () { return signIn(true); },
       disconnect: function () { persist('gtoken', undefined); return Promise.resolve({ ok: true }); },
       check: function () { return Promise.resolve(tokenOk() ? { ok: true } : { ok: false, code: 'drive_auth' }); },
@@ -317,4 +335,7 @@
     newId: function () { return 'ipad-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)); }
   };
   W0.redirected = W0.ready.then(takeRedirect);
+  W0.logSign = logSign;
+  // a new start of the app (iPadOS may reload a Home Screen app it put to sleep)
+  W0.ready.then(function () { var g = mem.gtoken; logSign('open', { left: g && g.tok && g.exp ? Math.round((g.exp - Date.now()) / 60000) : null }); });
 })();

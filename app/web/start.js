@@ -168,12 +168,14 @@
         W.signIn(true).then(function (r) { if (r.ok) { b.remove(); var s = W.sync(); if (s) s.tick(); } else { failedOnce = true; barReady(b, 'Didn’t work — tap to sign in another way'); } });
       };
       document.body.appendChild(b);
+      if (navigator.onLine && W.logSign) W.logSign('bar', {});
     }
     if (!navigator.onLine) b.textContent = 'No internet — your work is saved on this iPad and will sync when you’re back online';
     else if (/^No internet/.test(b.textContent) || !b.textContent) b.textContent = 'Google sign-in needed to sync — tap to reconnect';
   }
   function checkBar() { if (!W.tokenOk()) reconnectBar(); else { var b = document.getElementById('sc-reconnect'); if (b) b.remove(); } }
   window.addEventListener('online', function () { if (document.getElementById('sc-reconnect')) checkBar(); });
+  window.addEventListener('sc-signin-lost', function () { if (mounted) reconnectBar(); });
   window.addEventListener('offline', function () { if (document.getElementById('sc-reconnect')) reconnectBar(); });
 
   // ---------- offline copy of the app + updates ----------
