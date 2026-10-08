@@ -1,0 +1,9 @@
+/* SitCraft iPad app — touch-friendly adjustments (iPad only; the PC never loads this file) */
+/* Bigger tap targets: small buttons and tabs get at least 40 px of height (switches keep their own size) */
+button:not(.sw):not(.fibtn):not([role=switch]):not([role=radio]), [role=tab] { min-height: 40px; }
+/* small round info buttons keep their shape, with a bigger invisible touch area around them */
+.fibtn { position: relative; }
+.fibtn::after { content: ''; position: absolute; inset: -10px; }
+/* No grey flash on tap; no accidental text selection when tapping buttons */
+* { -webkit-tap-highlight-color: transparent; }
+button, [role=tab] { -webkit-user-select: none; user-select: none; touch-action: manipulation; }
