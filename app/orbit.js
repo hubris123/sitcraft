@@ -39,7 +39,8 @@
   }
   function draw(h, now) {
     var el = h.el, cv = h.cv, x = h.ctx;
-    var box = el.getBoundingClientRect(), S = Math.max(8, Math.min(box.width || 16, box.height || 16));
+    if (!h.S || now - (h.measured || 0) > 500) { var box = el.getBoundingClientRect(); h.S = Math.max(8, Math.min(box.width || 16, box.height || 16)); h.measured = now; }
+    var S = h.S;
     var dpr = window.devicePixelRatio || 1, W = Math.round(S * 1.8);
     if (h.W !== W || h.dpr !== dpr) {
       h.W = W; h.dpr = dpr; cv.width = W * dpr; cv.height = W * dpr;
@@ -75,8 +76,11 @@
         x.beginPath(); x.arc(cx + q.x * unit, cy + q.y * unit, r * q.s * (1 - j / 10), 0, 7); x.fill();
       }
       x.globalAlpha = Math.max(0, Math.min(1, p.o)); x.fillStyle = 'rgb(' + p.c + ')';
-      x.shadowColor = 'rgba(' + C + ',.9)'; x.shadowBlur = r * 1.8 * w[0];
-      x.beginPath(); x.arc(cx + p.x * unit, cy + p.y * unit, r * p.s, 0, 7); x.fill(); x.shadowBlur = 0;
+      if (w[0] > 0.01) {                      // glow: a soft halo behind the dot (cheap to draw, smooth on the iPad)
+        var o = x.globalAlpha; x.globalAlpha = o * 0.28 * w[0]; x.beginPath(); x.arc(cx + p.x * unit, cy + p.y * unit, r * p.s * 2.1, 0, 7); x.fill();
+        x.globalAlpha = o * 0.45 * w[0]; x.beginPath(); x.arc(cx + p.x * unit, cy + p.y * unit, r * p.s * 1.5, 0, 7); x.fill(); x.globalAlpha = o;
+      }
+      x.beginPath(); x.arc(cx + p.x * unit, cy + p.y * unit, r * p.s, 0, 7); x.fill();
     });
     x.globalAlpha = 1;
   }
@@ -84,9 +88,12 @@
     raf = 0;
     for (var i = hosts.length - 1; i >= 0; i--) {
       var h = hosts[i];
-      if (!h.el.isConnected) { hosts.splice(i, 1); if (seen) seen.delete(h.el); continue; }
+      var still = h.el.classList && (h.el.classList.contains('spin') || h.el.classList.contains('sc-spin'));
+      if (!h.el.isConnected || !still) {      // gone, or the screen reused this element for something else (e.g. a ✓)
+        hosts.splice(i, 1); if (seen) seen.delete(h.el); if (h.cv.parentNode) h.cv.parentNode.removeChild(h.cv); continue;
+      }
       if (!h.cv.isConnected || h.cv.parentNode !== h.el) h.el.appendChild(h.cv);   // a screen redraw dropped it: put it back
-      if (h.el.offsetParent === null && getComputedStyle(h.el).position !== 'fixed') continue;   // hidden: skip drawing
+      if (!h.el.offsetWidth && !h.el.offsetHeight) continue;   // hidden: skip drawing
       draw(h, now);
     }
     if (hosts.length) raf = requestAnimationFrame(loop);
@@ -114,8 +121,8 @@
   }
   function start() {
     css(); scan(document.body);
-    new MutationObserver(function (ms) { ms.forEach(function (m) { for (var i = 0; i < m.addedNodes.length; i++) scan(m.addedNodes[i]); }); })
-      .observe(document.documentElement, { childList: true, subtree: true });
+    new MutationObserver(function (ms) { ms.forEach(function (m) { if (m.type === 'attributes') scan(m.target); else for (var i = 0; i < m.addedNodes.length; i++) scan(m.addedNodes[i]); }); })
+      .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   }
   window.SitOrbit = { attach: attach, weights: weights, CYCLE: CYCLE };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);

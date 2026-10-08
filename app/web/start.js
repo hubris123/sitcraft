@@ -207,6 +207,14 @@
       document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && navigator.onLine) reg.update().catch(function () {}); });
     }, function () {});
   }
+  // When the on-screen keyboard opens, the iPad slides what you see down the page. Bars marked .sc-pinned (the "… is
+  // primary" bar) follow, so they stay at the top of the screen instead of sliding off it.
+  (function () {
+    var vv = window.visualViewport; if (!vv) return;
+    var q = 0, put = function () { q = 0; document.documentElement.style.setProperty('--sc-vv-top', Math.max(0, Math.round(vv.offsetTop)) + 'px'); };
+    var soon = function () { if (!q) q = requestAnimationFrame(put); };
+    vv.addEventListener('scroll', soon); vv.addEventListener('resize', soon); window.addEventListener('scroll', soon, true);
+  })();
   W.sw = { had: false, reg: null };
   offlineSetup();
   function mountApp() { window.DC.mount('App', document.getElementById('app'), {}); W.booted(); mounted = true; }

@@ -7,3 +7,5 @@ button:not(.sw):not(.fibtn):not([role=switch]):not([role=radio]), [role=tab] { m
 /* No grey flash on tap; no accidental text selection when tapping buttons */
 * { -webkit-tap-highlight-color: transparent; }
 button, [role=tab] { -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+/* The page itself never scrolls or bounces (each screen scrolls inside itself), so bars at the top stay put */
+html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
