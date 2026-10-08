@@ -57,49 +57,122 @@
     var mins = Math.round((t.exp - Date.now()) / 60000);
     return function (email) { logSign('got', { how: how, mins: mins, email: email || '' }); };
   }
-  // ---------------- Google sign-in (token lasts about an hour; signing in again needs a tap) ----------------
-  var tokenClient = null, signWaiters = null;
+  // ---------------- Google sign-in ----------------
+  // Google gives a web app 1-hour passes. The SitCraft sign-in helper (a Cloudflare Worker that keeps the Google secret,
+  // dev-tools/cloudflare/sitcraft-signin.js) turns one sign-in into a long-lasting "refresh" pass, kept here locked with
+  // a key that can't be copied out of this iPad, and renews the 1-hour pass quietly whenever it runs out.
+  var HELPER = 'https://sitcraft-signin.mvavrick.workers.dev';
+  var subtle = window.crypto && crypto.subtle;
+  function u8b64(u) { var s = ''; for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+  function b64u8(b) { var s = atob(b), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+  function lockKey() {
+    if (mem.gLock) return Promise.resolve(mem.gLock);
+    return subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(function (k) { persist('gLock', k); return k; });
+  }
+  function saveRefresh(rt) {
+    if (!rt || !subtle) return Promise.resolve(false);
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return lockKey().then(function (k) { return subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, new TextEncoder().encode(rt)); })
+      .then(function (ct) { persist('gRef', { iv: u8b64(iv), ct: u8b64(new Uint8Array(ct)), at: Date.now() }); return true; }, function () { return false; });
+  }
+  function readRefresh() {
+    var r = mem.gRef; if (!r || !mem.gLock || !subtle) return Promise.resolve(null);
+    return subtle.decrypt({ name: 'AES-GCM', iv: b64u8(r.iv) }, mem.gLock, b64u8(r.ct)).then(function (b) { return new TextDecoder().decode(b); }, function () { return null; });
+  }
+  var stays = function () { return !!(mem.gRef && mem.gLock); };
+  function setPass(at, secs, how, email) {
+    var t = { tok: at, exp: Date.now() + (Number(secs) || 3600) * 1000, email: email || (mem.gtoken && mem.gtoken.email) || '' };
+    persist('gtoken', t); expLogged = '';
+    var lg = gotPass(t, how);
+    return fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
+      if (u && u.email) { t.email = u.email; persist('gtoken', t); }
+      lg(t.email); return t;
+    }, function () { lg(t.email); return t; });
+  }
+  // A new 1-hour pass from the helper (one at a time). Resolves with the pass, or rejects with code drive_auth.
+  var renewing = null;
+  function renew(why) {
+    if (renewing) return renewing;
+    renewing = readRefresh().then(function (rt) {
+      if (!rt) throw Object.assign(new Error('Google sign-in needed'), { code: 'drive_auth' });
+      return fetch(HELPER + '/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }) }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (r.ok && j.access_token) {
+            var t = { tok: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
+            persist('gtoken', t); expLogged = ''; logSign('renewed', { why: why || '' }); return t.tok;
+          }
+          if (r.status === 401 || j.error === 'revoked') {   // removed in the Google account (or Unpair): sign in again
+            persist('gRef', undefined); logSign('renewFail', { why: 'revoked' });
+            try { window.dispatchEvent(new Event('sc-signin-lost')); } catch (e) {}
+          } else logSign('renewFail', { why: j.error || ('http ' + r.status) });
+          throw Object.assign(new Error('Google sign-in needed'), { code: 'drive_auth' });
+        });
+      }, function () { logSign('renewFail', { why: 'offline' }); throw Object.assign(new Error('Couldn’t reach the sign-in helper'), { code: 'drive_error' }); });
+    });
+    var done = function () { renewing = null; };
+    renewing.then(done, done);
+    return renewing;
+  }
+  var tokenClient = null, codeClient = null, signWaiters = null;
   function gisReady() {
     return new Promise(function (res, rej) {
       var n = 0; (function wait() { if (window.google && google.accounts && google.accounts.oauth2) return res(); if (++n > 100) return rej(new Error('Google sign-in didn’t load — check the internet connection.')); setTimeout(wait, 100); })();
     });
   }
+  // The Google pop-up. With the helper it asks for a sign-in code, which the helper turns into passes that keep you signed in.
   function signIn(hint) {
     return gisReady().then(function () {
       return new Promise(function (res) {
         signWaiters = res;
+        var fail = function (msg) { var done = signWaiters; signWaiters = null; if (done) done({ ok: false, error: msg }); };
+        if (google.accounts.oauth2.initCodeClient) {
+          codeClient = google.accounts.oauth2.initCodeClient({
+            client_id: CLIENT_ID, scope: SCOPE, ux_mode: 'popup', select_account: !hint,
+            hint: hint && mem.gtoken && mem.gtoken.email ? mem.gtoken.email : undefined,
+            callback: function (r) {
+              if (!r || !r.code) return fail((r && (r.error_description || r.error)) || 'Sign-in didn’t finish');
+              fetch(HELPER + '/exchange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: r.code }) })
+                .then(function (x) { return x.json().catch(function () { return {}; }); })
+                .then(function (j) {
+                  if (!j.access_token) return fail('The sign-in helper couldn’t finish (' + (j.error || 'no answer') + ')');
+                  var keep = j.refresh_token ? saveRefresh(j.refresh_token) : Promise.resolve(false);
+                  return keep.then(function (kept) {
+                    return setPass(j.access_token, j.expires_in, kept ? 'pop-up · stays signed in' : 'pop-up').then(function (t) {
+                      var done = signWaiters; signWaiters = null;
+                      if (done) done({ ok: true, email: t.email, stays: kept });
+                      if (sync) sync.tick();
+                    });
+                  });
+                }, function () { fail('Couldn’t reach the sign-in helper — check the internet connection'); });
+            },
+            error_callback: function (e) { fail((e && (e.message || e.type)) || 'The sign-in window was closed or blocked'); }
+          });
+          codeClient.requestCode();
+          return;
+        }
+        // (older Google script without the code pop-up: a 1-hour pass only)
         if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID, scope: SCOPE,
           callback: function (r) {
-            var done = signWaiters; signWaiters = null;
-            if (!r || !r.access_token) { if (done) done({ ok: false, error: (r && (r.error_description || r.error)) || 'Sign-in didn’t finish' }); return; }
-            var t = { tok: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
-            persist('gtoken', t);
-            var lg = gotPass(t, 'pop-up');
-            fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
-              if (u && u.email) { t.email = u.email; persist('gtoken', t); }
-              lg(t.email);
-              if (done) done({ ok: true, email: t.email });
-              if (sync) sync.tick();
-            }, function () { lg(t.email); if (done) done({ ok: true, email: t.email }); });
+            if (!r || !r.access_token) return fail((r && (r.error_description || r.error)) || 'Sign-in didn’t finish');
+            setPass(r.access_token, r.expires_in, 'pop-up').then(function (t) { var done = signWaiters; signWaiters = null; if (done) done({ ok: true, email: t.email }); if (sync) sync.tick(); });
           },
-          error_callback: function (e) { var done = signWaiters; signWaiters = null; if (done) done({ ok: false, error: (e && (e.message || e.type)) || 'The sign-in window was closed or blocked' }); }
+          error_callback: function (e) { fail((e && (e.message || e.type)) || 'The sign-in window was closed or blocked'); }
         });
         tokenClient.requestAccessToken(hint && mem.gtoken && mem.gtoken.email ? { login_hint: mem.gtoken.email, prompt: '' } : {});
       });
     }, function (e) { return { ok: false, error: e.message }; });
   }
-  // Sign in another way: go to Google's own page and come back with the sign-in in the address (for the Home Screen app,
-  // where the usual sign-in window may not open). The address must be listed in the Web client's "Authorized redirect URIs".
+  // Sign in another way: go to Google's own page (through the helper, so it also keeps you signed in) and come back.
+  // The helper's /callback address is listed in the "SitCraft iPad" client's Authorized redirect URIs.
   function standalone() { try { return navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } }
   function backTo() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
   function signInRedirect(hint) {
     var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
     persist('oauthState', { s: st, at: Date.now() });
     return flushed().then(function () {
-      var u = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=token&include_granted_scopes=true&client_id=' + encodeURIComponent(CLIENT_ID) +
-        '&redirect_uri=' + encodeURIComponent(backTo()) + '&scope=' + encodeURIComponent(SCOPE) + '&state=' + encodeURIComponent(st) +
-        (hint && mem.gtoken && mem.gtoken.email ? '&login_hint=' + encodeURIComponent(mem.gtoken.email) : '');
+      var u = HELPER + '/start?back=' + encodeURIComponent(backTo()) + '&state=' + encodeURIComponent(st) +
+        (hint && mem.gtoken && mem.gtoken.email ? '&hint=' + encodeURIComponent(mem.gtoken.email) : '');
       location.assign(u);
       return new Promise(function () {}); // the page is leaving
     });
@@ -113,35 +186,42 @@
     var want = mem.oauthState; persist('oauthState', undefined);
     if (!want || want.s !== P.state || Date.now() - want.at > 15 * 60000) return Promise.resolve({ ok: false, error: 'That sign-in didn’t come from this iPad — try again' });
     if (!P.access_token) return Promise.resolve({ ok: false, error: P.error === 'access_denied' ? 'Sign-in was cancelled' : (P.error_description || P.error || 'Sign-in didn’t finish') });
-    var t = { tok: P.access_token, exp: Date.now() + (Number(P.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
-    persist('gtoken', t);
-    var lg = gotPass(t, 'sign in another way');
-    return fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
-      if (u && u.email) { t.email = u.email; persist('gtoken', t); }
-      lg(t.email);
-      return { ok: true, email: t.email, redirect: true };
-    }, function () { lg(t.email); return { ok: true, email: t.email, redirect: true }; });
+    var keep = P.refresh_token ? saveRefresh(P.refresh_token) : Promise.resolve(false);
+    return keep.then(function (kept) {
+      return setPass(P.access_token, P.expires_in, kept ? 'sign in another way · stays signed in' : 'sign in another way').then(function (t) { return { ok: true, email: t.email, redirect: true, stays: kept }; });
+    });
   }
   function token() {
     var t = mem.gtoken;
     if (t && t.tok && t.exp > Date.now() + 60000) return t.tok;
-    if (t && t.tok && t.exp && expLogged !== t.tok) { expLogged = t.tok; logSign('expired', {}); }
+    if (t && t.tok && t.exp && expLogged !== t.tok && !stays()) { expLogged = t.tok; logSign('expired', {}); }
     throw Object.assign(new Error('Google sign-in needed'), { code: 'drive_auth' });
   }
-  var tokenOk = function () { try { token(); return true; } catch (e) { return false; } };
+  // Signed in = a pass that's still good, or a kept sign-in the helper can renew
+  var tokenOk = function () { try { token(); return true; } catch (e) { return stays(); } };
+  // A good pass for the next call: renews it quietly (5 minutes early) when the sign-in is kept
+  function ensure() {
+    var t = mem.gtoken;
+    if (stays() && (!t || !t.tok || t.exp < Date.now() + 5 * 60000)) return renew(t && t.tok ? 'ran out' : 'start').catch(function (e) { try { return token(); } catch (x) { throw e; } });
+    try { return Promise.resolve(token()); } catch (e) { return Promise.reject(e); }
+  }
 
   // ---------------- Google Drive over https ----------------
   function gcall(url, opts, again) {
-    var tok; try { tok = token(); } catch (e) { return Promise.reject(e); }
     opts = opts || {};
     var where = String(url).replace(/^https:\/\/[^/]+/, '').split('?')[0].slice(0, 40);
-    return fetch(url, Object.assign({}, opts, { headers: Object.assign({ authorization: 'Bearer ' + tok }, opts.headers || {}) })).then(function (r) {
-      if (r.ok) { if (again) logSign('retryOk', { where: where }); return r; }
-      // Google sometimes says "not signed in" for a moment: wait and try once more before giving up on the pass
-      if (r.status === 401 && !again) return new Promise(function (res) { setTimeout(res, 1500); }).then(function () { return gcall(url, opts, true); });
-      return r.text().then(function (t) {
-        if (r.status === 401) { var g = mem.gtoken; logSign('drive401', { where: where, mins: g && g.exp ? Math.round((g.exp - Date.now()) / 60000) : null }); if (g) persist('gtoken', Object.assign({}, g, { exp: 0 })); try { window.dispatchEvent(new Event('sc-signin-lost')); } catch (e) {} }
-        throw Object.assign(new Error('Google Drive error ' + r.status + ' ' + String(t).slice(0, 160)), { status: r.status, code: r.status === 404 ? 'not_found' : (r.status === 401 ? 'drive_auth' : 'drive_error') });
+    return ensure().then(function (tok) {
+      return fetch(url, Object.assign({}, opts, { headers: Object.assign({ authorization: 'Bearer ' + tok }, opts.headers || {}) })).then(function (r) {
+        if (r.ok) { if (again) logSign('retryOk', { where: where }); return r; }
+        // Google sometimes says "not signed in" for a moment: get a fresh pass (or wait) and try once more
+        if (r.status === 401 && !again) {
+          var next = stays() ? renew('drive said no').then(function () {}, function () {}) : new Promise(function (res) { setTimeout(res, 1500); });
+          return next.then(function () { return gcall(url, opts, true); });
+        }
+        return r.text().then(function (t) {
+          if (r.status === 401) { var g = mem.gtoken; logSign('drive401', { where: where, mins: g && g.exp ? Math.round((g.exp - Date.now()) / 60000) : null }); if (g) persist('gtoken', Object.assign({}, g, { exp: 0 })); if (!stays()) { try { window.dispatchEvent(new Event('sc-signin-lost')); } catch (e) {} } }
+          throw Object.assign(new Error('Google Drive error ' + r.status + ' ' + String(t).slice(0, 160)), { status: r.status, code: r.status === 404 ? 'not_found' : (r.status === 401 ? 'drive_auth' : 'drive_error') });
+        });
       });
     });
   }
@@ -296,7 +376,8 @@
       sendReset: function () { return Promise.resolve(NOT_ON_IPAD); }, useReset: function () { return Promise.resolve(NOT_ON_IPAD); }
     },
     drive: {
-      status: function () { var g = mem.gtoken || {}; return { connected: tokenOk(), email: g.email || '', clientId: '', builtIn: true, exp: g.exp || 0, signLog: (mem.signLog || []).slice(-10) }; },
+      status: function () { var g = mem.gtoken || {}; return { connected: tokenOk(), email: g.email || '', clientId: '', builtIn: true, exp: g.exp || 0, stays: stays(), signLog: (mem.signLog || []).slice(-10) }; },
+      stayIn: function () { return signIn(true); },
       connect: function () { return signIn(true); },
       disconnect: function () { persist('gtoken', undefined); return Promise.resolve({ ok: true }); },
       check: function () { return Promise.resolve(tokenOk() ? { ok: true } : { ok: false, code: 'drive_auth' }); },
