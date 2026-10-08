@@ -103,7 +103,7 @@
   function placeSoon() { if (!placeQ) placeQ = requestAnimationFrame(place); }
   window.addEventListener('scroll', placeSoon, true); window.addEventListener('resize', placeSoon);
   function start() {
-    css(); scan(document.body); placeSoon(); setInterval(placeSoon, 1000);
+    css(); scan(document.body); placeSoon();
     new MutationObserver(function (ms) { ms.forEach(function (m) { for (var i = 0; i < m.addedNodes.length; i++) scan(m.addedNodes[i]); }); })
       .observe(root, { childList: true, subtree: true });
     new MutationObserver(placeSoon).observe(root, { childList: true, subtree: true });

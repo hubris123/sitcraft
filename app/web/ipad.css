@@ -12,3 +12,7 @@ button.zb2 { height: 28px !important; }
 button, [role=tab] { -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 /* The page itself never scrolls or bounces (each screen scrolls inside itself), so bars at the top stay put */
 html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+
+/* Battery: the Dashboard's tiles don't drift on the iPad (moving pictures behind ~60 frosted-glass panels kept the
+   graphics chip redrawing all the time). They still swap pictures now and then. */
+.tileart { animation: none !important; }

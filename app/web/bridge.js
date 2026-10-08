@@ -308,12 +308,31 @@
     persist('unpaired', { by: other ? other.name : '', removed: !other, at: Date.now() });
     flushed().then(function () { location.reload(); });
   }
+  // Battery: the sync's regular Drive check skips while the app is hidden (it checks again on return) and, when this
+  // iPad is only viewing and hasn't been touched for 2 minutes, runs every 3rd time (30 s instead of 10 s).
+  // The device in charge keeps every check, so its "still here" note and handover answers stay on time.
+  var lastTouch = Date.now();
+  ['pointerdown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { lastTouch = Date.now(); }, true); });
+  var syncTimers = {
+    set: function (f, ms) { return setTimeout(f, ms); }, clear: function (h) { clearTimeout(h); }, stop: function (h) { clearInterval(h); },
+    every: function (f, ms) {
+      var n = 0;
+      return setInterval(function () {
+        if (document.visibilityState === 'hidden') return;
+        var idle = Date.now() - lastTouch > 120000, viewing = false;
+        try { viewing = !!(sync && sync.status && sync.status().role !== 'primary'); } catch (e) {}
+        if (idle && viewing && (++n % 3)) return;
+        f();
+      }, ms);
+    }
+  };
   function startSync() {
     if (sync || !mem.device) return sync;
     sync = window.SitSync.createSync({
       drive: drive, device: mem.device, emit: emit,
       local: { read: function () { return mem[DATA_KEY] || null; }, write: function (t) { persist(DATA_KEY, t); }, rescue: function (f, t) { persist('rescue:' + f, t); } },
-      settings: { get: settingsGet, set: settingsSet }
+      settings: { get: settingsGet, set: settingsSet },
+      timers: syncTimers
     });
     return sync;
   }
