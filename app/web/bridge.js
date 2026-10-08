@@ -185,7 +185,7 @@
     if (!b) {
       b = document.createElement('button'); b.id = 'sc-refresh';
       b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;font:600 15px Geist,system-ui,sans-serif;border-radius:999px;padding:12px 18px;min-height:46px;border:1px solid #1f5c52;background:#11231f;color:#9fd9cf;box-shadow:0 10px 30px rgba(0,0,0,.5)';
-      b.onclick = function () { flushed().then(function () { location.reload(); }); };
+      b.onclick = function () { if (b.disabled) return; b.disabled = true; b.style.opacity = '.75'; b.innerHTML = '<span style="display:inline-block;width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:2px solid rgba(46,196,176,.28);border-top-color:#2ec4b0;animation:scBusySpin .8s linear infinite;vertical-align:-3px;margin-right:9px"></span>Updating…'; if (!document.getElementById('sc-refresh-css')) { var st = document.createElement('style'); st.id = 'sc-refresh-css'; st.textContent = '@keyframes scBusySpin{to{transform:rotate(360deg)}}'; document.head.appendChild(st); } flushed().then(function () { location.reload(); }); };
       document.body.appendChild(b);
     }
     b.textContent = 'Newer changes from ' + (by ? (by.kind === 'ipad' ? 'the iPad' : (by.name || 'your PC')) : 'your PC') + ' — tap to update';
@@ -304,7 +304,7 @@
       onEvent: function (f) { fns.push(f); return function () { var i = fns.indexOf(f); if (i >= 0) fns.splice(i, 1); }; }
     }
   };
-  window.sitcomDesktop = D;
+  window.sitcomDesktop = window.SitBusy ? window.SitBusy(D, window) : D;   // slow buttons get a spinner (renderer/busy.js)
 
   // For the start-up and setup screens (web/start.js)
   var W0 = window.SC_WEB = {

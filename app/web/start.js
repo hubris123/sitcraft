@@ -29,7 +29,9 @@
       '#sc-setup .code{font-family:"Geist Mono",monospace;letter-spacing:.12em;text-transform:uppercase}' +
       '#sc-setup .err{font-size:14px;color:#f5a39b;line-height:1.5}#sc-setup .busy{font-size:14px;color:#c9c7c2}' +
       '#sc-setup video{width:100%;max-height:300px;border-radius:12px;background:#000;margin-top:10px;object-fit:cover}' +
-      '#sc-setup .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}';
+      '#sc-setup .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}' +
+      '@keyframes scSpin{to{transform:rotate(360deg)}}.sc-spin{display:inline-block;flex:none;width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:2px solid rgba(46,196,176,.28);border-top-color:#2ec4b0;animation:scSpin .8s linear infinite;vertical-align:-3px;margin-right:9px}' +
+      '#sc-setup .busy{display:flex;align-items:center}';
     document.head.appendChild(st);
   }
   function stepBox(n, title, body, state) {
@@ -51,11 +53,12 @@
       '<input class="code" id="sc-code" placeholder="or type the code, e.g. K7MQ-4T2P" autocomplete="off" autocapitalize="characters" value="' + esc(S.code) + '"><div class="row"><button data-a="usecode">Use this code</button></div>'), st(3));
     h += stepBox(4, 'Name this iPad', S.step < 4 ? '<div class="s">Only one iPad at a time — using this one replaces any other.</div>' :
       '<input id="sc-name" value="' + esc(S.name) + '" maxlength="40" aria-label="Name this iPad"><div class="s" style="margin-top:8px">Only one iPad at a time — using this one replaces any other.</div><div class="row" style="justify-content:flex-end"><button class="pri" data-a="use">Use this iPad</button></div>', st(4));
-    if (S.busy) h += '<div class="busy">' + esc(S.busy) + '</div>';
+    if (S.busy) h += '<div class="busy" role="status"><span class="sc-spin"></span>' + esc(S.busy) + '</div>';
     if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
     h += '</div>';
     root.innerHTML = h;
-    root.querySelectorAll('button[data-a]').forEach(function (b) { b.onclick = function () { act(b.getAttribute('data-a')); }; });
+    // while something is working, every button waits (greyed) so it isn't pressed again
+    root.querySelectorAll('button[data-a]').forEach(function (b) { if (S.busy && b.getAttribute('data-a') !== 'stopscan') b.disabled = true; b.onclick = function () { if (!S.busy) act(b.getAttribute('data-a')); }; });
     var ci = document.getElementById('sc-code'); if (ci) ci.oninput = function () { S.code = ci.value; };
     var ni = document.getElementById('sc-name'); if (ni) ni.oninput = function () { S.name = ni.value; };
     if (S.scanning) startCamera();
@@ -135,15 +138,19 @@
   // Sign-in expired: a bar to sign in again. With no internet there's nothing to sign in to, so it just says your work is
   // safe on this iPad, and turns back into the sign-in bar when the internet returns.
   var failedOnce = false;
+  // a bar that's working: greyed, a spinner, and further taps ignored until it's done
+  function barBusy(b, text) { css(); b.disabled = true; b.style.opacity = '.75'; b.innerHTML = '<span class="sc-spin"></span>' + esc(text); }
+  function barReady(b, text) { b.disabled = false; b.style.opacity = ''; b.textContent = text; }
   function reconnectBar() {
     var b = document.getElementById('sc-reconnect');
     if (!b) {
       b = $('<button id="sc-reconnect" style="position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;font:600 15px Geist,system-ui,sans-serif;border-radius:999px;padding:12px 18px;min-height:46px;border:1px solid #6b4a2a;background:#2a2112;color:#f2d8a8;box-shadow:0 10px 30px rgba(0,0,0,.5)"></button>');
       b.onclick = function () {
         if (!navigator.onLine) return;
-        if (failedOnce) { b.textContent = 'Opening Google…'; W.signInRedirect(true); return; }
-        b.textContent = 'Waiting for Google…';
-        W.signIn(true).then(function (r) { if (r.ok) { b.remove(); var s = W.sync(); if (s) s.tick(); } else { failedOnce = true; b.textContent = 'Didn’t work — tap to sign in another way'; } });
+        if (b.disabled) return;
+        if (failedOnce) { barBusy(b, 'Opening Google…'); W.signInRedirect(true); return; }
+        barBusy(b, 'Waiting for Google…');
+        W.signIn(true).then(function (r) { if (r.ok) { b.remove(); var s = W.sync(); if (s) s.tick(); } else { failedOnce = true; barReady(b, 'Didn’t work — tap to sign in another way'); } });
       };
       document.body.appendChild(b);
     }
@@ -163,7 +170,7 @@
     if (!mounted && !root) return applyUpdate(reg); // still starting up: nothing open, switch now
     if (document.getElementById('sc-update')) return;
     var b = $('<button id="sc-update" style="position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px, env(safe-area-inset-bottom));z-index:60;font:600 14px Geist,system-ui,sans-serif;border-radius:999px;padding:10px 16px;min-height:44px;border:1px solid #3c3360;background:#1c1830;color:#cfc3fb;box-shadow:0 10px 30px rgba(0,0,0,.5)">New version of SitCraft ready — tap to update</button>');
-    b.onclick = function () { b.textContent = 'Updating…'; applyUpdate(reg); };
+    b.onclick = function () { if (b.disabled) return; barBusy(b, 'Updating…'); applyUpdate(reg); };
     document.body.appendChild(b);
   }
   function applyUpdate(reg) {
