@@ -56,7 +56,7 @@
         if (!b.ov) {
           if (b.el.querySelector && b.el.querySelector('.spin')) continue;   // the screen already shows its own spinner there
           style(); b.ov = doc.createElement('div'); b.ov.className = 'sc-busy-ov'; b.ov.setAttribute('aria-hidden', 'true');
-          b.ov.appendChild(doc.createElement('i')); doc.body.appendChild(b.ov);
+          var dot = doc.createElement('i'); dot.className = 'sc-spin'; b.ov.appendChild(dot); doc.body.appendChild(b.ov);   // the dots are drawn by renderer/orbit.js
           b.el.setAttribute('aria-busy', 'true');
         }
         var r = b.el.getBoundingClientRect();
