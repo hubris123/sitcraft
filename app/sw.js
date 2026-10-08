@@ -4,7 +4,7 @@
 // (or the next time SitCraft starts before anything is open), so the app never changes under you while you write.
 // tools/build-web.js fills in the build stamp and the file list.
 'use strict';
-var BUILD = '4fa008b9275a';
+var BUILD = 'f529fcee8b48';
 var FILES = ["index.html","busy.js","dc-runtime.js","desktop-shim.js","library.js","manifest.webmanifest","orbit.js","screens.js","split.js","sync.js","vendor/fonts.css","vendor/fonts/courier-prime-latin-400-italic.woff2","vendor/fonts/courier-prime-latin-400-normal.woff2","vendor/fonts/courier-prime-latin-700-italic.woff2","vendor/fonts/courier-prime-latin-700-normal.woff2","vendor/fonts/geist-mono-latin-400-normal.woff2","vendor/fonts/geist-mono-latin-500-normal.woff2","vendor/fonts/geist-mono-latin-600-normal.woff2","vendor/fonts/geist-sans-latin-400-normal.woff2","vendor/fonts/geist-sans-latin-500-normal.woff2","vendor/fonts/geist-sans-latin-600-normal.woff2","vendor/fonts/geist-sans-latin-700-normal.woff2","vendor/preact.min.umd.js","web/ai.js","web/bridge.js","web/icons/icon-180.png","web/icons/icon-192.png","web/icons/icon-512.png","web/ipad.css","web/kit.js","web/start.js","web/vendor/jsQR-LICENSE.txt","web/vendor/jsQR.js","web/vendor/pako-LICENSE.txt","web/vendor/pako.min.js"];
 var CACHE = 'sitcraft-' + BUILD;
 var INDEX = new URL('index.html', self.registration.scope).href;
