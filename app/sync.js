@@ -479,7 +479,9 @@ function createSync(o) {
       live: c && c.live ? c.live : null, lastSent: s.lastSent, lastGot: s.lastGot || null,
       history: c ? (c.history || []).slice(-12).reverse() : [],
       notice: st.syncNotice || null, rescued: c && c.rescued ? c.rescued.slice() : [],
-      paired: c && c.paired ? c.paired : null, pairing: c && c.pairing ? { expires: c.pairing.expires, at: c.pairing.at } : null
+      paired: c && c.paired ? c.paired : null, pairing: c && c.pairing ? { expires: c.pairing.expires, at: c.pairing.at } : null,
+      // AI on the iPad: on/off, a fingerprint of the PC's keys (never the keys), the PC's model choices, who has the current keys
+      ai: c && c.ai ? { on: !!c.ai.on, fp: c.ai.fp || '', cfg: c.ai.cfg || null, hints: c.ai.hints || null, got: c.ai.got || null, handoff: c.ai.handoff ? { name: c.ai.handoff.name, expires: c.ai.handoff.expires, kh: c.ai.handoff.kh, at: c.ai.handoff.at } : null } : null
     };
     const j = JSON.stringify(v);
     if (force || j !== lastJson) { lastJson = j; emit('status', v); }
