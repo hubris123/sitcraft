@@ -21,6 +21,8 @@
       r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
     });
   }
+  // Ask the iPad to keep SitCraft's storage for good (Safari may otherwise clear a website's storage after weeks unused)
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}
   function loadAll() {
     return idb().then(function (d) {
       db = d;
@@ -74,6 +76,37 @@
         tokenClient.requestAccessToken(hint && mem.gtoken && mem.gtoken.email ? { login_hint: mem.gtoken.email, prompt: '' } : {});
       });
     }, function (e) { return { ok: false, error: e.message }; });
+  }
+  // Sign in another way: go to Google's own page and come back with the sign-in in the address (for the Home Screen app,
+  // where the usual sign-in window may not open). The address must be listed in the Web client's "Authorized redirect URIs".
+  function standalone() { try { return navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } }
+  function backTo() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+  function signInRedirect(hint) {
+    var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    persist('oauthState', { s: st, at: Date.now() });
+    return flushed().then(function () {
+      var u = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=token&include_granted_scopes=true&client_id=' + encodeURIComponent(CLIENT_ID) +
+        '&redirect_uri=' + encodeURIComponent(backTo()) + '&scope=' + encodeURIComponent(SCOPE) + '&state=' + encodeURIComponent(st) +
+        (hint && mem.gtoken && mem.gtoken.email ? '&login_hint=' + encodeURIComponent(mem.gtoken.email) : '');
+      location.assign(u);
+      return new Promise(function () {}); // the page is leaving
+    });
+  }
+  // Coming back from Google's page: keep the sign-in, tidy the address
+  function takeRedirect() {
+    var h = location.hash || '';
+    if (!/[#&](access_token|error)=/.test(h)) return Promise.resolve(null);
+    var P = {}; h.replace(/^#/, '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) P[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); });
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    var want = mem.oauthState; persist('oauthState', undefined);
+    if (!want || want.s !== P.state || Date.now() - want.at > 15 * 60000) return Promise.resolve({ ok: false, error: 'That sign-in didn’t come from this iPad — try again' });
+    if (!P.access_token) return Promise.resolve({ ok: false, error: P.error === 'access_denied' ? 'Sign-in was cancelled' : (P.error_description || P.error || 'Sign-in didn’t finish') });
+    var t = { tok: P.access_token, exp: Date.now() + (Number(P.expires_in) || 3600) * 1000, email: (mem.gtoken && mem.gtoken.email) || '' };
+    persist('gtoken', t);
+    return fetch(G + '/oauth2/v3/userinfo', { headers: { authorization: 'Bearer ' + t.tok } }).then(function (x) { return x.ok ? x.json() : {}; }).then(function (u) {
+      if (u && u.email) { t.email = u.email; persist('gtoken', t); }
+      return { ok: true, email: t.email, redirect: true };
+    }, function () { return { ok: true, email: t.email, redirect: true }; });
   }
   function token() {
     var t = mem.gtoken;
@@ -165,6 +198,9 @@
     if (sync) sync.woke();
   });
   window.addEventListener('pagehide', function () { if (sync) sync.sleeping(); });
+  // Back online after working without internet: check Drive and upload anything written meanwhile
+  window.addEventListener('online', function () { if (sync) sync.woke(); });
+  window.addEventListener('offline', function () { if (sync) sync.tick(); });
   function unpaired(other) {
     // Disconnected (another iPad was paired, or Remove on the PC): forget the shows, the settings and the Google sign-in
     if (sync) sync.stop();
@@ -271,12 +307,14 @@
   window.sitcomDesktop = D;
 
   // For the start-up and setup screens (web/start.js)
-  window.SC_WEB = {
+  var W0 = window.SC_WEB = {
     DATA_KEY: DATA_KEY, mem: mem, persist: persist, flushed: flushed,
     ready: loadAll(),
-    signIn: signIn, tokenOk: tokenOk, findRoot: findRoot, drive: drive,
+    redirected: null,
+    signIn: signIn, signInRedirect: signInRedirect, standalone: standalone, tokenOk: tokenOk, findRoot: findRoot, drive: drive,
     startSync: startSync, sync: function () { return sync; },
     booted: function () { booting = false; },
     newId: function () { return 'ipad-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)); }
   };
+  W0.redirected = W0.ready.then(takeRedirect);
 })();

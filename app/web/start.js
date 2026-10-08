@@ -11,7 +11,7 @@
   var normCode = function (s) { return String(s || '').toUpperCase().replace(/^SITCRAFT-PAIR:/, '').replace(/[^A-Z0-9]/g, ''); };
 
   // ---------- setup screen ----------
-  var S = { step: 1, email: '', ctl: null, code: '', name: 'iPad', err: '', busy: '', scanning: false };
+  var S = { other: false, step: 1, email: '', ctl: null, code: '', name: 'iPad', err: '', busy: '', scanning: false };
   var root = null, stream = null, scanTimer = null;
   function css() {
     if (document.getElementById('sc-setup-css')) return;
@@ -43,7 +43,7 @@
     var c = S.ctl, h = '<div class="card"><div><h1>Set up SitCraft on this iPad</h1><div class="sub">Your shows come from your own Google Drive. Your PC stays the home base.</div></div>';
     if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + ' Set it up again to use it.</div>';
     h += stepBox(1, 'Sign in with Google', S.step > 1 ? '<div class="s">Signed in' + (S.email ? ' as ' + esc(S.email) : '') + '</div>' :
-      '<div class="s">Use the same Google account as SitCraft on your PC. If Google says the app isn’t verified, choose <b>Advanced</b> → <b>Go to SitCraft</b>.</div><div class="row"><button class="pri" data-a="signin">Sign in with Google</button></div>', st(1));
+      '<div class="s">Use the same Google account as SitCraft on your PC. If Google says the app isn’t verified, choose <b>Advanced</b> → <b>Go to SitCraft</b>.</div><div class="row"><button class="pri" data-a="signin">Sign in with Google</button>' + (S.other || W.standalone() ? '<button data-a="signin2">Sign in another way</button>' : '') + '</div>', st(1));
     h += stepBox(2, 'Find your SitCraft data', S.step > 2 && c ? '<div class="s">Found it in Drive · <b style="color:#ecebe8">' + esc(who(c.primary).replace(/^the /, '')) + '</b> is in charge · last saved ' + esc(day(c.savedAt)) + ' at ' + esc(clock(c.savedAt)) + '</div>' : '<div class="s">Looks for the “SitCraft Backups” folder your PC keeps in Drive.</div>', st(2));
     h += stepBox(3, 'Scan the code on your PC', S.step > 3 ? '<div class="s">Code accepted</div>' : (S.step < 3 ? '<div class="s">On your PC: App settings → iPad → <b>Pair an iPad</b>.</div>' :
       '<div class="s">On your PC open App settings → iPad → <b>Pair an iPad</b>, then scan the code it shows — or type the short code under it.</div>' +
@@ -65,10 +65,11 @@
     if (a === 'signin') {
       set({ err: '', busy: 'Waiting for Google…' });
       W.signIn(false).then(function (r) {
-        if (!r.ok) return set({ busy: '', err: 'Google sign-in didn’t finish: ' + r.error + '. If no window opened, allow pop-ups for this site and try again.' });
+        if (!r.ok) return set({ busy: '', other: true, err: 'Google sign-in didn’t finish: ' + r.error + '. If no window opened, try “Sign in another way”.' });
         set({ email: r.email, step: 2, busy: 'Looking for your SitCraft data…' }); findData();
       });
-    } else if (a === 'scan') set({ scanning: true, err: '' });
+    } else if (a === 'signin2') { set({ err: '', busy: 'Opening Google…' }); W.signInRedirect(false); }
+    else if (a === 'scan') set({ scanning: true, err: '' });
     else if (a === 'stopscan') { stopCamera(); set({ scanning: false }); }
     else if (a === 'usecode') checkCode(S.code);
     else if (a === 'use') finish();
@@ -131,18 +132,73 @@
   }
 
   // ---------- normal start ----------
+  // Sign-in expired: a bar to sign in again. With no internet there's nothing to sign in to, so it just says your work is
+  // safe on this iPad, and turns back into the sign-in bar when the internet returns.
+  var failedOnce = false;
   function reconnectBar() {
-    if (document.getElementById('sc-reconnect')) return;
-    var b = $('<button id="sc-reconnect" style="position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;font:600 15px Geist,system-ui,sans-serif;border-radius:999px;padding:12px 18px;min-height:46px;border:1px solid #6b4a2a;background:#2a2112;color:#f2d8a8;box-shadow:0 10px 30px rgba(0,0,0,.5)">Google sign-in needed to sync — tap to reconnect</button>');
-    b.onclick = function () { b.textContent = 'Waiting for Google…'; W.signIn(true).then(function (r) { if (r.ok) { b.remove(); var s = W.sync(); if (s) s.tick(); } else b.textContent = 'Didn’t work — tap to try again'; }); };
+    var b = document.getElementById('sc-reconnect');
+    if (!b) {
+      b = $('<button id="sc-reconnect" style="position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;font:600 15px Geist,system-ui,sans-serif;border-radius:999px;padding:12px 18px;min-height:46px;border:1px solid #6b4a2a;background:#2a2112;color:#f2d8a8;box-shadow:0 10px 30px rgba(0,0,0,.5)"></button>');
+      b.onclick = function () {
+        if (!navigator.onLine) return;
+        if (failedOnce) { b.textContent = 'Opening Google…'; W.signInRedirect(true); return; }
+        b.textContent = 'Waiting for Google…';
+        W.signIn(true).then(function (r) { if (r.ok) { b.remove(); var s = W.sync(); if (s) s.tick(); } else { failedOnce = true; b.textContent = 'Didn’t work — tap to sign in another way'; } });
+      };
+      document.body.appendChild(b);
+    }
+    if (!navigator.onLine) b.textContent = 'No internet — your work is saved on this iPad and will sync when you’re back online';
+    else if (/^No internet/.test(b.textContent) || !b.textContent) b.textContent = 'Google sign-in needed to sync — tap to reconnect';
+  }
+  function checkBar() { if (!W.tokenOk()) reconnectBar(); else { var b = document.getElementById('sc-reconnect'); if (b) b.remove(); } }
+  window.addEventListener('online', function () { if (document.getElementById('sc-reconnect')) checkBar(); });
+  window.addEventListener('offline', function () { if (document.getElementById('sc-reconnect')) reconnectBar(); });
+
+  // ---------- offline copy of the app + updates ----------
+  // The app files are kept on the iPad by web/sw.js. A new version downloads in the background; before anything is open it's
+  // switched to straight away, otherwise a bar offers it (your work is saved first).
+  var mounted = false, reloading = false;
+  function updateBar(reg) {
+    if (!reg || !reg.waiting) return;
+    if (!mounted && !root) return applyUpdate(reg); // still starting up: nothing open, switch now
+    if (document.getElementById('sc-update')) return;
+    var b = $('<button id="sc-update" style="position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px, env(safe-area-inset-bottom));z-index:60;font:600 14px Geist,system-ui,sans-serif;border-radius:999px;padding:10px 16px;min-height:44px;border:1px solid #3c3360;background:#1c1830;color:#cfc3fb;box-shadow:0 10px 30px rgba(0,0,0,.5)">New version of SitCraft ready — tap to update</button>');
+    b.onclick = function () { b.textContent = 'Updating…'; applyUpdate(reg); };
     document.body.appendChild(b);
   }
-  function mountApp() { window.DC.mount('App', document.getElementById('app'), {}); W.booted(); }
-  W.ready.then(function () {
-    if (!mem.device || !mem[W.DATA_KEY]) return render();
+  function applyUpdate(reg) {
+    if (!reg.waiting) return;
+    var s = W.sync(), first = s && mounted ? s.flush().catch(function () {}) : Promise.resolve();
+    first.then(function () { return W.flushed(); }).then(function () { reg.waiting.postMessage('update-now'); });
+  }
+  function offlineSetup() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext || location.protocol === 'file:') return;
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (reloading || !W.sw.had) return; reloading = true; W.flushed().then(function () { location.reload(); }); });
+    W.sw.had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      W.sw.reg = reg;
+      updateBar(reg);
+      reg.addEventListener('updatefound', function () {
+        var n = reg.installing; if (!n) return;
+        n.addEventListener('statechange', function () { if (n.state === 'installed' && navigator.serviceWorker.controller) updateBar(reg); });
+      });
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && navigator.onLine) reg.update().catch(function () {}); });
+    }, function () {});
+  }
+  W.sw = { had: false, reg: null };
+  offlineSetup();
+  function mountApp() { window.DC.mount('App', document.getElementById('app'), {}); W.booted(); mounted = true; }
+  W.ready.then(function () { return W.redirected; }).then(function (back) {
+    if (!mem.device || !mem[W.DATA_KEY]) {
+      // setting up: carry on after coming back from Google's sign-in page
+      if (back && back.ok) { set({ email: back.email, step: 2, busy: 'Looking for your SitCraft data…' }); return findData(); }
+      if (back) S.err = 'Google sign-in didn’t finish: ' + back.error + '.';
+      if (back) S.other = true;
+      return render();
+    }
     var sy = W.startSync();
-    var go = function () { mountApp(); if (!W.tokenOk()) reconnectBar(); setInterval(function () { if (!W.tokenOk()) reconnectBar(); }, 30000); };
-    if (!W.tokenOk()) return go();
+    var go = function () { if (mounted) return; mountApp(); checkBar(); setInterval(function () { if (!W.tokenOk()) reconnectBar(); }, 30000); };
+    if (!W.tokenOk() || !navigator.onLine) return go();
     Promise.race([sy.tick(), new Promise(function (r) { setTimeout(r, 8000); })]).then(go, go);
   });
 })();

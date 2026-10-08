@@ -460,7 +460,8 @@ function createSync(o) {
 
   // Windows is about to sleep or lock: upload right away
   const sleeping = () => flush();
-  const woke = () => tick();
+  // Waking up / back online: check Drive, then upload anything written meanwhile (e.g. with no internet) straight away
+  const woke = () => tick().then(() => { if (st.syncOn && st.syncPrimary && st.syncDirtySince) return flush(); });
 
   function start() { stop(); s.check = T.every(() => tick(), CHECK_MS); }
   function stop() { if (s.check) T.stop(s.check); s.check = null; T.clear(s.quiet); s.quiet = null; }
