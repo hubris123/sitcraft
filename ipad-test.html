@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SitCraft — iPad connection test</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="style.css">
+<style>
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin:16px 0}
+  .step h2{margin:0 0 6px;font-size:19px}
+  button{font:inherit;font-size:17px;font-weight:600;border-radius:12px;padding:14px 20px;min-height:52px;border:0;background:var(--fg);color:var(--bg);cursor:pointer}
+  button[disabled]{opacity:.4;cursor:default}
+  .res{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .line{display:flex;gap:10px;align-items:flex-start;font-size:15px;color:var(--fg)}
+  .ic{flex:none;width:24px;height:24px;border-radius:99px;display:grid;place-items:center;font-size:13px;font-weight:800}
+  .good{background:#1f5c52;color:#7fe0d3}.bad{background:#5c1f24;color:#f5a39b}.wait{background:var(--line);color:var(--mute)}.info{background:#2a2112;color:#f2b33d}
+  .small{font-size:13px;color:var(--mute)}
+  #summary{white-space:pre-wrap;font:13px/1.5 ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a class="brand" href="./"><span class="mark">S</span>SitCraft</a></header>
+  <h1>iPad connection test</h1>
+  <p class="lead">Checks that this iPad can reach the SitCraft data your PC keeps in Google Drive. It only <b>reads</b> — nothing in your Drive is changed.</p>
+  <div class="note">Before you start: on your PC, Drive sync must be on (SitCraft → App settings → DEVICES › iPad).</div>
+
+  <div class="step">
+    <h2>1. Google Drive</h2>
+    <p class="small">Sign in with the same Google account you use on your PC. Google may say the app isn’t verified — choose <b>Advanced</b> → <b>Go to SitCraft</b>, then allow access to “the specific Google Drive files that you use with this app”.</p>
+    <button id="go">Sign in with Google</button>
+    <div class="res" id="drive"></div>
+  </div>
+
+  <div class="step">
+    <h2>2. AI connection (no key needed)</h2>
+    <p class="small">Checks whether this iPad’s browser is allowed to talk to Claude and ChatGPT directly. No key is sent, so this costs nothing.</p>
+    <button id="ai">Check AI connection</button>
+    <div class="res" id="aires"></div>
+  </div>
+
+  <div class="step">
+    <h2>Results</h2>
+    <p class="small">Take a screenshot of this box and send it to Claude.</p>
+    <div id="summary">Not run yet.</div>
+  </div>
+  <footer><span>SitCraft · test page</span><a href="privacy.html">Privacy</a></footer>
+</div>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(function () {
+  var CLIENT_ID = '887682540626-40gmhov9d4sv3tat6pcbo4krbfeqk3pf.apps.googleusercontent.com';
+  var SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  var G = 'https://www.googleapis.com/drive/v3/files';
+  var sum = { device: navigator.userAgent.replace(/\s+/g, ' ').slice(0, 120), drive: [], ai: [] };
+  function show() {
+    var s = 'Device: ' + sum.device + '\n\nGoogle Drive:\n' + (sum.drive.length ? sum.drive.map(function (x) { return '  ' + x; }).join('\n') : '  not run') +
+      '\n\nAI:\n' + (sum.ai.length ? sum.ai.map(function (x) { return '  ' + x; }).join('\n') : '  not run') + '\n\nTime: ' + new Date().toString().slice(0, 24);
+    document.getElementById('summary').textContent = s;
+  }
+  function line(box, kind, text, rec) {
+    var d = document.createElement('div'); d.className = 'line';
+    d.innerHTML = '<span class="ic ' + kind + '">' + ({ good: '✓', bad: '✕', wait: '…', info: '!' })[kind] + '</span><span></span>';
+    d.lastChild.textContent = text; document.getElementById(box).appendChild(d);
+    if (rec) { rec.push(({ good: 'OK  ', bad: 'FAIL', wait: '... ', info: 'NOTE' })[kind] + ' ' + text); show(); }
+    return d;
+  }
+  function clock(iso) { if (!iso) return '?'; var t = new Date(iso); return t.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  async function gunzipText(buf) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('this browser can’t unzip (DecompressionStream missing)');
+    var s = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(s).text();
+  }
+
+  var tok = null, client = null;
+  function api(url) { return fetch(url, { headers: { authorization: 'Bearer ' + tok } }).then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error('Drive ' + r.status + ' ' + t.slice(0, 120)); }); return r; }); }
+  async function find(q) { var r = await api(G + '?fields=files(id,name,modifiedTime,mimeType)&pageSize=20&q=' + encodeURIComponent(q + ' and trashed=false')); return (await r.json()).files || []; }
+
+  async function runDrive() {
+    document.getElementById('drive').innerHTML = ''; sum.drive = [];
+    line('drive', 'good', 'Signed in to Google', sum.drive);
+    try {
+      var folders = await find("name='SitCraft Backups' and mimeType='application/vnd.google-apps.folder'");
+      if (folders.length) line('drive', 'good', 'Can see the “SitCraft Backups” folder your PC made', sum.drive);
+      else line('drive', 'bad', 'Can’t see the “SitCraft Backups” folder', sum.drive);
+      var ctl = await find("name='SitCraft Control.json'");
+      if (!ctl.length) {
+        if (folders.length) line('drive', 'info', 'No “SitCraft Control.json” yet — turn Drive sync on in SitCraft on your PC, wait a few seconds, then tap Sign in again', sum.drive);
+        else line('drive', 'bad', 'This iPad can’t see any files SitCraft made on your PC (the Google sign-ins may not share files)', sum.drive);
+        return;
+      }
+      line('drive', 'good', 'Found “SitCraft Control.json” (the “who’s in charge” file)', sum.drive);
+      var c = await (await api(G + '/' + ctl[0].id + '?alt=media')).json();
+      var who = c.primary ? (c.primary.kind === 'ipad' ? 'iPad' : (c.primary.name || 'PC')) : '?';
+      line('drive', 'good', 'In charge: ' + who + ' · data version ' + c.version + ' · last saved ' + clock(c.savedAt), sum.drive);
+      var idx = await find("name='SitCraft Live Index.json'");
+      if (!idx.length) { line('drive', 'bad', 'Can’t see “SitCraft Live Index.json”', sum.drive); return; }
+      var ix = await (await api(G + '/' + idx[0].id + '?alt=media')).json();
+      var names = Object.keys(ix.parts || {});
+      line('drive', 'good', 'Live copy index: ' + names.length + ' pieces', sum.drive);
+      // Open the smallest few pieces to prove downloading + unzipping works
+      var some = names.sort(function (a, b) { return (ix.parts[a].b || 0) - (ix.parts[b].b || 0); }).slice(0, 3), okN = 0;
+      for (var i = 0; i < some.length; i++) {
+        var buf = await (await api(G + '/' + ix.parts[some[i]].id + '?alt=media')).arrayBuffer();
+        var txt = await gunzipText(buf); JSON.parse(txt); okN++;
+      }
+      line('drive', okN === some.length ? 'good' : 'bad', 'Downloaded and unzipped ' + okN + ' of ' + some.length + ' pieces', sum.drive);
+      line('drive', 'good', 'The iPad can read your SitCraft data ✔', sum.drive);
+    } catch (e) { line('drive', 'bad', 'Error: ' + (e && e.message || e), sum.drive); }
+  }
+
+  document.getElementById('go').onclick = function () {
+    if (!window.google || !google.accounts || !google.accounts.oauth2) { line('drive', 'bad', 'Google sign-in didn’t load — check the internet connection and reload', sum.drive); return; }
+    if (!client) client = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, callback: function (r) {
+      if (r && r.access_token) { tok = r.access_token; runDrive(); }
+      else line('drive', 'bad', 'Sign-in didn’t finish: ' + ((r && (r.error_description || r.error)) || 'unknown'), sum.drive);
+    }, error_callback: function (e) { line('drive', 'bad', 'Sign-in window problem: ' + ((e && (e.message || e.type)) || 'unknown') + ' (allow pop-ups for this site and try again)', sum.drive); } });
+    client.requestAccessToken();
+  };
+
+  document.getElementById('ai').onclick = async function () {
+    document.getElementById('aires').innerHTML = ''; sum.ai = [];
+    try {
+      var r = await fetch('https://api.anthropic.com/v1/models', { headers: { 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': 'not-a-real-key' } });
+      line('aires', r.status === 401 ? 'good' : 'info', 'Claude: reachable from this iPad (answered ' + r.status + ' to a fake key, as expected)', sum.ai);
+    } catch (e) { line('aires', 'bad', 'Claude: blocked by the browser (' + (e && e.message || e) + ')', sum.ai); }
+    try {
+      var r2 = await fetch('https://api.openai.com/v1/models', { headers: { authorization: 'Bearer not-a-real-key' } });
+      line('aires', r2.status === 401 ? 'good' : 'info', 'ChatGPT: reachable from this iPad (answered ' + r2.status + ' to a fake key, as expected)', sum.ai);
+    } catch (e) { line('aires', 'bad', 'ChatGPT: blocked by the browser (' + (e && e.message || e) + ')', sum.ai); }
+  };
+  show();
+})();
+</script>
+</body>
+</html>
