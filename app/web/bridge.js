@@ -121,10 +121,12 @@
   }
   // The Google pop-up. With the helper it asks for a sign-in code, which the helper turns into passes that keep you signed in.
   function signIn(hint) {
+    if (standalone()) { logSign('signStart', { how: 'Google’s page (Home Screen app)' }); return signInRedirect(hint); }
+    logSign('signStart', { how: 'pop-up' });
     return gisReady().then(function () {
       return new Promise(function (res) {
         signWaiters = res;
-        var fail = function (msg) { var done = signWaiters; signWaiters = null; if (done) done({ ok: false, error: msg }); };
+        var fail = function (msg) { logSign('signFail', { why: String(msg || '').slice(0, 120) }); var done = signWaiters; signWaiters = null; if (done) done({ ok: false, error: msg }); };
         if (google.accounts.oauth2.initCodeClient) {
           codeClient = google.accounts.oauth2.initCodeClient({
             client_id: CLIENT_ID, scope: SCOPE, ux_mode: 'popup', select_account: !hint,
@@ -184,8 +186,8 @@
     var P = {}; h.replace(/^#/, '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) P[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); });
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     var want = mem.oauthState; persist('oauthState', undefined);
-    if (!want || want.s !== P.state || Date.now() - want.at > 15 * 60000) return Promise.resolve({ ok: false, error: 'That sign-in didn’t come from this iPad — try again' });
-    if (!P.access_token) return Promise.resolve({ ok: false, error: P.error === 'access_denied' ? 'Sign-in was cancelled' : (P.error_description || P.error || 'Sign-in didn’t finish') });
+    if (!want || want.s !== P.state || Date.now() - want.at > 15 * 60000) { logSign('signFail', { why: 'came back without this iPad’s code' }); return Promise.resolve({ ok: false, error: 'That sign-in didn’t come from this iPad — try again' }); }
+    if (!P.access_token) { logSign('signFail', { why: P.error || 'no pass' }); return Promise.resolve({ ok: false, error: P.error === 'access_denied' ? 'Sign-in was cancelled' : (P.error_description || P.error || 'Sign-in didn’t finish') }); }
     var keep = P.refresh_token ? saveRefresh(P.refresh_token) : Promise.resolve(false);
     return keep.then(function (kept) {
       return setPass(P.access_token, P.expires_in, kept ? 'sign in another way · stays signed in' : 'sign in another way').then(function (t) { return { ok: true, email: t.email, redirect: true, stays: kept }; });
@@ -376,7 +378,7 @@
       sendReset: function () { return Promise.resolve(NOT_ON_IPAD); }, useReset: function () { return Promise.resolve(NOT_ON_IPAD); }
     },
     drive: {
-      status: function () { var g = mem.gtoken || {}; return { connected: tokenOk(), email: g.email || '', clientId: '', builtIn: true, exp: g.exp || 0, stays: stays(), signLog: (mem.signLog || []).slice(-10) }; },
+      status: function () { var g = mem.gtoken || {}; return { connected: tokenOk(), email: g.email || '', clientId: '', builtIn: true, exp: g.exp || 0, stays: stays(), signLog: (mem.signLog || []).slice(-14) }; },
       stayIn: function () { return signIn(true); },
       connect: function () { return signIn(true); },
       disconnect: function () { persist('gtoken', undefined); return Promise.resolve({ ok: true }); },
