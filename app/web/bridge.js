@@ -157,7 +157,14 @@
     }
     b.textContent = 'Newer changes from ' + (by ? (by.kind === 'ipad' ? 'the iPad' : (by.name || 'your PC')) : 'your PC') + ' — tap to update';
   }
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && wantReload) flushed().then(function () { location.reload(); }); });
+  // Going to the background (another app, the Home Screen, the iPad locking): upload anything new straight away, like the
+  // PC does before it sleeps. Coming back: check Drive (and show anything newer).
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { if (sync) sync.sleeping(); return; }
+    if (wantReload) { flushed().then(function () { location.reload(); }); return; }
+    if (sync) sync.woke();
+  });
+  window.addEventListener('pagehide', function () { if (sync) sync.sleeping(); });
   function unpaired(other) {
     // Disconnected (another iPad was paired, or Remove on the PC): forget the shows, the settings and the Google sign-in
     if (sync) sync.stop();
@@ -251,9 +258,8 @@
       status: function () { return sync ? sync.status() : { on: false, role: 'off', history: [] }; },
       enable: function () { return sync ? sync.enable() : Promise.resolve({ ok: false }); },
       disable: function () { return Promise.resolve({ ok: false, error: 'ipad' }); },
-      // Editing on the iPad arrives in the next step
-      makePrimary: function () { return Promise.resolve({ ok: false, error: 'not_yet' }); },
-      forceTakeover: function () { return Promise.resolve({ ok: false, error: 'not_yet' }); },
+      makePrimary: function () { return sync ? sync.makePrimary() : Promise.resolve({ ok: false, error: 'drive_off' }); },
+      forceTakeover: function () { return sync ? sync.forceTakeover() : Promise.resolve({ ok: false, error: 'drive_off' }); },
       syncNow: function () { return sync ? sync.flush() : Promise.resolve({ ok: false }); },
       check: function () { return sync ? sync.tick().then(function () { return sync.status(); }) : Promise.resolve({}); },
       dismiss: function () { if (sync) sync.dismiss(); return Promise.resolve({ ok: true }); },
