@@ -189,6 +189,9 @@
     var b = $('<button id="sc-update" style="position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px, env(safe-area-inset-bottom));z-index:60;font:600 14px Geist,system-ui,sans-serif;border-radius:999px;padding:10px 16px;min-height:44px;border:1px solid #3c3360;background:#1c1830;color:#cfc3fb;box-shadow:0 10px 30px rgba(0,0,0,.5)">New version of SitCraft ready — tap to update</button>');
     b.onclick = function () { if (b.disabled) return; barBusy(b, 'Updating…'); applyUpdate(reg); };
     document.body.appendChild(b);
+    // Or quietly, the next time you switch away from SitCraft (it restarts on the new version while it's out of sight)
+    var away = function () { if (document.visibilityState !== 'hidden') return; document.removeEventListener('visibilitychange', away); applyUpdate(reg); };
+    document.addEventListener('visibilitychange', away);
   }
   function applyUpdate(reg) {
     if (!reg.waiting) return;

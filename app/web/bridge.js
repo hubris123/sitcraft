@@ -274,19 +274,36 @@
     // (just viewing while the other device writes? don't yank the screen — offer an update button, and update when you come back)
     if (ev === 'data' && !booting) {
       if (p && p.reason === 'refresh') refreshLater(p.by);
-      else flushed().then(function () { location.reload(); });
+      else flushed().then(function () { softOrReload(p && p.by); });
     }
     if (ev === 'data' && booting) sync.windowLoaded();
   }
-  var wantReload = false;
+  // New data in place: the screen freezes with a spinner, the screens are rebuilt on the new data where you were, and it
+  // unfreezes (App.softReload) — no full reload. Falls back to a full reload if the window can't do that.
+  function softOrReload(by) {
+    var b = document.getElementById('sc-refresh'); if (b) b.remove();
+    wantReload = false; clearTimeout(idleT);
+    if (window.SC_softReload) window.SC_softReload(by); else location.reload();
+  }
+  // Viewing while the other device writes: update in the background as soon as you've stopped touching the screen for a
+  // few seconds (or straight away from the button). Typing or scrolling? It waits.
+  var wantReload = false, wantBy = null, idleT = null, IDLE_MS = 4000;
+  function applyWhenIdle() {
+    clearTimeout(idleT);
+    if (!wantReload || document.visibilityState === 'hidden') return;
+    var wait = IDLE_MS - (Date.now() - lastTouch), ae = document.activeElement, typing = ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && !/^(button|checkbox|radio|range|file)$/i.test(ae.type)) || ae.isContentEditable);
+    if (wait > 0 || typing) { idleT = setTimeout(applyWhenIdle, Math.max(wait, 1000)); return; }
+    flushed().then(function () { softOrReload(wantBy); });
+  }
   function refreshLater(by) {
-    wantReload = true;
+    wantReload = true; wantBy = by || null;
     if (document.visibilityState === 'hidden') return;
+    applyWhenIdle();
     var b = document.getElementById('sc-refresh');
     if (!b) {
       b = document.createElement('button'); b.id = 'sc-refresh';
       b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;font:600 15px Geist,system-ui,sans-serif;border-radius:999px;padding:12px 18px;min-height:46px;border:1px solid #1f5c52;background:#11231f;color:#9fd9cf;box-shadow:0 10px 30px rgba(0,0,0,.5)';
-      b.onclick = function () { if (b.disabled) return; b.disabled = true; b.style.opacity = '.75'; b.innerHTML = '<span class="sc-spin" style="display:inline-block;width:16px;height:16px;vertical-align:-3px;margin-right:9px"></span>Updating…'; flushed().then(function () { location.reload(); }); };
+      b.onclick = function () { if (b.disabled) return; b.disabled = true; b.style.opacity = '.75'; b.innerHTML = '<span class="sc-spin" style="display:inline-block;width:16px;height:16px;vertical-align:-3px;margin-right:9px"></span>Updating…'; flushed().then(function () { softOrReload(wantBy); }); };
       document.body.appendChild(b);
     }
     b.textContent = 'Newer changes from ' + (by ? (by.kind === 'ipad' ? 'the iPad' : (by.name || 'your PC')) : 'your PC') + ' — tap to update';
@@ -295,7 +312,7 @@
   // PC does before it sleeps. Coming back: check Drive (and show anything newer).
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') { if (sync) sync.sleeping(); return; }
-    if (wantReload) { flushed().then(function () { location.reload(); }); return; }
+    if (wantReload) { flushed().then(function () { softOrReload(wantBy); }); return; }
     if (sync) sync.woke();
   });
   window.addEventListener('pagehide', function () { if (sync) sync.sleeping(); });
@@ -442,6 +459,7 @@
       dismiss: function () { if (sync) sync.dismiss(); return Promise.resolve({ ok: true }); },
       rescuedData: function (id) { return sync ? sync.rescuedData(id) : Promise.resolve({ ok: false }); },
       rescuedDone: function () { return Promise.resolve({ ok: false }); },
+      loaded: function () { if (sync) sync.windowLoaded(); },
       onEvent: function (f) { fns.push(f); return function () { var i = fns.indexOf(f); if (i >= 0) fns.splice(i, 1); }; }
     }
   };

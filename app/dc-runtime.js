@@ -108,7 +108,7 @@
       for (var i = 0; i < node.attributes.length; i++) { var at = node.attributes[i]; if (at.name === 'name' || at.name.indexOf('hint-') === 0) continue; pf.push({ k: at.name, f: compileValue(at.value) }); }
       return function (scope) {
         var props = {}; for (var j = 0; j < pf.length; j++) props[pf[j].k] = pf[j].f(scope);
-        return h(Host, { cname: cname, props: props, key: 'dc-' + cname });
+        return h(Host, { cname: cname, props: props, key: 'dc-' + cname + (props.gen ? '-' + props.gen : '') });   // a new gen rebuilds the screen (App.softReload)
       };
     }
     var af = compileAttrs(node), kids = compileChildren(templateKids(node), ctx);
@@ -154,13 +154,18 @@
     try { this.logic = new def.Cls(this.props.props || {}); } catch (e) { console.error('[dc] ' + this.props.cname + ' constructor', e); this.err = String(e && e.stack || e); return; }
     this.logic.props = this.props.props || {};
     this.logic.__host = this;
+    // rebuilt after new data arrived (App.softReload): take back where it was (its keepState)
+    var carry = window.DC && window.DC.carry && window.DC.carry[this.props.cname];
+    if (carry) { try { Object.assign(this.logic.state, carry); } catch (e) {} delete window.DC.carry[this.props.cname]; }
   };
   Host.prototype.schedule = function () {
     var self = this; if (this._q || this._dead) return; this._q = true;
     Promise.resolve().then(function () { self._q = false; if (!self._dead) self.forceUpdate(); });
   };
-  Host.prototype.componentDidMount = function () { if (this.logic && this.logic.componentDidMount) { try { this.logic.componentDidMount(); } catch (e) { console.error('[dc] ' + this.props.cname + ' componentDidMount', e); } } };
-  Host.prototype.componentWillUnmount = function () { this._dead = true; if (this.logic && this.logic.componentWillUnmount) { try { this.logic.componentWillUnmount(); } catch (e) { console.error(e); } } };
+  var LIVE = {};
+  Host.prototype.componentDidMount = function () { LIVE[this.props.cname] = this; this._didMount(); };
+  Host.prototype._didMount = function () { if (this.logic && this.logic.componentDidMount) { try { this.logic.componentDidMount(); } catch (e) { console.error('[dc] ' + this.props.cname + ' componentDidMount', e); } } };
+  Host.prototype.componentWillUnmount = function () { if (LIVE[this.props.cname] === this) delete LIVE[this.props.cname]; this._dead = true; if (this.logic && this.logic.componentWillUnmount) { try { this.logic.componentWillUnmount(); } catch (e) { console.error(e); } } };
   Host.prototype.render = function () {
     this.ensure();
     if (this.err) return h('pre', { style: 'color:#f5a39b;padding:20px;white-space:pre-wrap;font:12px monospace' }, this.err);
@@ -173,6 +178,9 @@
 
   window.DC = {
     register: register,
+    // each live screen's keepState() (UI only: section, selection, tabs…), keyed by screen name
+    stash: function () { var out = {}; Object.keys(LIVE).forEach(function (k) { var L = LIVE[k].logic; if (L && L.keepState) { try { out[k] = L.keepState(); } catch (e) {} } }); return out; },
+    carry: null,
     mount: function (name, el, props) { P.render(h(Host, { cname: name, props: props || {} }), el); },
     DCLogic: DCLogic
   };
