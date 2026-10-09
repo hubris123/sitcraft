@@ -296,6 +296,9 @@
     flushed().then(function () { softOrReload(wantBy); });
   }
   function refreshLater(by) {
+    // Viewing only: nothing here can be saved, so the change is simply brought in, silently, right away — no button,
+    // no spinner, nothing rebuilt (App.quietUpdate keeps scrolling, panels and selections as they are)
+    if (window.SC_quietUpdate) { flushed().then(function () { window.SC_quietUpdate(by); }); return; }
     wantReload = true; wantBy = by || null;
     if (document.visibilityState === 'hidden') return;
     applyWhenIdle();
