@@ -228,6 +228,7 @@
     });
   }
   var rootId = null;
+  var picCache = {};   // full character-sheet pictures already fetched this session (by Drive id)
   function q(s) { return encodeURIComponent(s); }
   function esc(n) { return String(n).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
   function findRoot() {
@@ -409,6 +410,26 @@
       },
       download: function (id) { return drive.download(id).then(function (b) { return { ok: true, data: K.text(b) }; }, function (e) { return { ok: false, error: e.message }; }); },
       remove: function () { return Promise.resolve(NOT_ON_IPAD); }
+    },
+    // Character sheet pictures: on the iPad they go straight to Drive › SitCraft Backups › <Show> › Character sheets
+    // (the PC keeps its own copy when it next shows them). Removing is PC-only.
+    pics: {
+      save: function (show, file, bytes, mime) {
+        var showDir = String(show).replace(/[\\/:*?"<>|]/g, '').trim() || 'Show', name = String(file).replace(/[\\/:*?"<>|]/g, '').trim() || 'Picture.jpg';
+        return findRoot().then(function (r) { return folderIn(showDir, r); }).then(function (f) { return folderIn('Character sheets', f); })
+          .then(function (f) { return createFile(name, bytes, mime || 'image/jpeg', f); })
+          .then(function (id) { picCache[id] = { bytes: bytes, mime: mime || 'image/jpeg' }; return { ok: true, file: name, drive: id, driveErr: '' }; }, function (e) { return { ok: false, code: e.code || 'drive_error', error: e.message }; });
+      },
+      upload: function () { return Promise.resolve({ ok: false, code: 'pc_only' }); },
+      read: function (show, file, id) {
+        if (!id) return Promise.resolve({ ok: false, error: 'This picture is still only on your PC — open SitCraft on the PC (with Drive on) to send it.' });
+        if (picCache[id]) return Promise.resolve({ ok: true, bytes: picCache[id].bytes, mime: picCache[id].mime });
+        var mime = /\.png$/i.test(file) ? 'image/png' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg';
+        return drive.download(id).then(function (b) { picCache[id] = { bytes: b, mime: mime }; return { ok: true, bytes: b, mime: mime }; }, function (e) { return { ok: false, code: e.code || 'drive_error', error: e.message }; });
+      },
+      has: function () { return Promise.resolve({ ok: true, has: false }); },
+      remove: function () { return Promise.resolve(NOT_ON_IPAD); },
+      reveal: function () { return Promise.resolve({ ok: true }); }
     },
     sync: {
       status: function () { return sync ? sync.status() : { on: false, role: 'off', history: [] }; },
