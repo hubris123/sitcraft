@@ -237,7 +237,7 @@
       if (hpl !== lk.plot && hpl !== t.plot) { n.plot = hpl; lk.plot = hpl; lk.tplot = hpl; mark = true; }
       if (b.act !== t.act) { n.act = b.act; mark = true; }
       var ch = addSpeakers(t.chars, info.who, known); if (ch !== (t.chars || '')) n.chars = ch;
-      if (Math.abs((t.dur || 0) - info.minutes) > 0.001) n.dur = info.minutes;
+      if (!t.durSet && Math.abs((t.dur || 0) - info.minutes) > 0.001) n.dur = info.minutes;   // a time the person set wins
       n.w = true; n.pages = info.pages;
       if (mark) n.chg = { by: 'script', at: now };
       if (JSON.stringify(n) !== JSON.stringify(t)) { tl[rec.i] = n; changed = true; }
