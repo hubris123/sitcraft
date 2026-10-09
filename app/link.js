@@ -19,12 +19,14 @@
   function fromStruct(sv, x, i) {
     return { id: x.tid || ('sv' + sv.id + '_' + i), plot: cleanPlot(x.plot || 'X'), act: Math.max(0, Math.min(4, parseInt(x.act, 10) || 0)),
       dur: Math.max(0.2, Math.round((parseFloat(x.minutes) || 1) * 20) / 20), title: x.title || 'Scene', summary: x.summary || '', beat: x.beat || '',
-      chars: splitChars(x.characters).join(', '), location: x.location || '', purpose: (x.purpose || []).slice() };
+      chars: splitChars(x.characters).join(', '), location: x.location || '', purpose: (x.purpose || []).slice(),
+      notes: x.notes || '', jokes: (x.jokes || []).slice() };
   }
   // timeline scene → structure scene (keeps anything else the draft had for that scene)
   function toStruct(t, old) {
     return Object.assign({}, old || {}, { tid: t.id, act: t.act, plot: t.plot, title: t.title || 'Scene', summary: t.summary || '', beat: t.beat || '',
-      purpose: (t.purpose || (old && old.purpose) || []).slice(), characters: splitChars(t.chars), location: t.location || '', minutes: t.dur });
+      purpose: (t.purpose || (old && old.purpose) || []).slice(), characters: splitChars(t.chars), location: t.location || '', minutes: t.dur,
+      notes: t.notes || '', jokes: (t.jokes || []).slice() });
   }
 
   // Copy the timeline into the in-use draft (call after any timeline change)
@@ -432,7 +434,42 @@
     });
   }
 
-  root.SCLink = { PLOTS: PLOTS, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots,
+  // ---- Scene notes: typed notes + jokes dropped from "Ideas for this episode" (kept on the timeline scene) ----
+  function setNotes(d, k, id, text) {
+    var tl = timeline(d, k), t = tl && tl.filter(function (x) { return x.id === id; })[0]; if (!t || (t.notes || '') === text) return false;
+    return patch(d, k, id, { notes: text });
+  }
+  function addJoke(d, k, id, idea) {
+    var tl = timeline(d, k), t = tl && tl.filter(function (x) { return x.id === id; })[0]; if (!t || !idea) return false;
+    var js = (t.jokes || []).slice(); if (js.some(function (j) { return j.id === idea.id; })) return false;
+    js.push({ id: idea.id, text: String(idea.text || '') });
+    return patch(d, k, id, { jokes: js });
+  }
+  function removeJoke(d, k, id, ideaId) {
+    var tl = timeline(d, k), t = tl && tl.filter(function (x) { return x.id === id; })[0]; if (!t) return false;
+    var js = (t.jokes || []).filter(function (j) { return j.id !== ideaId; }); if (js.length === (t.jokes || []).length) return false;
+    return patch(d, k, id, { jokes: js });
+  }
+  // where each idea is used: ideaId → [{ n: scene number (1-based, timeline order), id, where: location or title }]
+  function jokeUses(d, k) {
+    var out = {}; (timeline(d, k) || []).forEach(function (t, i) {
+      (t.jokes || []).forEach(function (j) { (out[j.id] = out[j.id] || []).push({ n: i + 1, id: t.id, where: t.location || t.title || 'Scene' }); });
+    });
+    return out;
+  }
+  function usesLabel(u) {
+    if (!u || !u.length) return '';
+    return u.length === 1 ? 'In scene ' + u[0].n + ' · ' + u[0].where : 'In scenes ' + u.map(function (x) { return x.n; }).join(', ');
+  }
+  // the notes as lines for Claude's prompt (empty when there are none)
+  function notesForPrompt(x) {
+    var L = [], n = String((x && x.notes) || '').trim();
+    if (n) L.push('  Writer\'s notes for this scene: ' + n.replace(/\s*\n\s*/g, ' / '));
+    ((x && x.jokes) || []).forEach(function (j) { if (String(j.text || '').trim()) L.push('  Use this joke in this scene (make it land in the characters\' voices): ' + j.text); });
+    return L;
+  }
+
+  root.SCLink = { PLOTS: PLOTS, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
     use: use, adopt: adopt, fromStruct: fromStruct, toStruct: toStruct, suggestByCast: suggestByCast, claudePrompt: claudePrompt, readClaude: readClaude,
     COL: COL, LAB: LAB, assignOpen: assignOpen, assignVals: assignVals,
     parseHeading: parseHeading, parse: parse, ensure: ensure, pace: pace, scriptLinked: scriptLinked, pair: pair, fromScript: fromScript, toScript: toScript,
