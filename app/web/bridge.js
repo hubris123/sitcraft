@@ -414,9 +414,9 @@
     // Character sheet pictures: on the iPad they go straight to Drive › SitCraft Backups › <Show> › Character sheets
     // (the PC keeps its own copy when it next shows them). Removing is PC-only.
     pics: {
-      save: function (show, file, bytes, mime) {
+      save: function (show, file, bytes, mime, sub) {
         var showDir = String(show).replace(/[\\/:*?"<>|]/g, '').trim() || 'Show', name = String(file).replace(/[\\/:*?"<>|]/g, '').trim() || 'Picture.jpg';
-        return findRoot().then(function (r) { return folderIn(showDir, r); }).then(function (f) { return folderIn('Character sheets', f); })
+        return findRoot().then(function (r) { return folderIn(showDir, r); }).then(function (f) { return folderIn(sub === 'Locations' ? 'Locations' : 'Character sheets', f); })
           .then(function (f) { return createFile(name, bytes, mime || 'image/jpeg', f); })
           .then(function (id) { picCache[id] = { bytes: bytes, mime: mime || 'image/jpeg' }; return { ok: true, file: name, drive: id, driveErr: '' }; }, function (e) { return { ok: false, code: e.code || 'drive_error', error: e.message }; });
       },
