@@ -270,6 +270,45 @@
     }).then(function (r) { delete running[id]; return r; });
   }
 
+  // One picture for a character sheet (same as the PC's openai:image): examples → "edits", none → "generations"
+  function oaImgErr(status, m) {
+    return status === 401 || status === 403 ? (/verif/i.test(m) ? 'needs_verify' : 'not_granted') : status === 429 ? (creditMsg(m) ? 'no_credit' : 'rate_limited')
+      : status === 404 ? 'bad_model' : status === 400 ? (/safety|moderation|content policy|rejected/i.test(m) ? 'refused' : 'bad_request') : 'api_error';
+  }
+  function openaiImage(id, prompt, refs, opts) {
+    var no = refuse('openai'); if (no) return Promise.resolve({ error: no });
+    opts = opts || {}; refs = (refs || []).slice(0, 10);
+    var c = cfg(), list = c.openaiImageModels || [], model = opts.model || (c.openaiImageModel && list.indexOf(c.openaiImageModel) >= 0 ? c.openaiImageModel : list[0]);
+    if (!model) return Promise.resolve({ error: { code: 'no_image_model', message: 'No picture model (gpt-image) — on the PC, open App settings → AI and check the ChatGPT key.' } });
+    var key = keys.openai, ctl = new AbortController(), size = opts.size || ''; running[id] = ctl;
+    function call() {
+      var req;
+      if (refs.length) {
+        var fd = new FormData(); fd.append('model', model); fd.append('prompt', String(prompt)); fd.append('n', '1'); if (size) fd.append('size', size);
+        refs.forEach(function (x, i) { fd.append('image[]', new Blob([x.bytes], { type: x.mime || 'image/png' }), 'example-' + (i + 1) + (/png/.test(x.mime) ? '.png' : /webp/.test(x.mime) ? '.webp' : '.jpg')); });
+        req = fetch(OA + '/images/edits', { method: 'POST', headers: { authorization: 'Bearer ' + key }, body: fd, signal: ctl.signal });
+      } else {
+        var body = { model: model, prompt: String(prompt), n: 1 }; if (size) body.size = size;
+        req = fetch(OA + '/images/generations', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+      }
+      return req.then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) { var m = (j.error && j.error.message) || '', code = oaImgErr(r.status, m); if (code === 'not_granted') setBad('openai', 'rejected'); else if (code === 'no_credit') setBad('openai', 'credit'); return { error: { code: code, status: r.status, message: m } }; }
+          var d = (j.data || [])[0] || {}; if (!d.b64_json) return { error: { code: 'api_error', message: 'No picture came back.' } };
+          setBad('openai', null);
+          return { ok: true, bytes: b64(d.b64_json), mime: 'image/png', model: model };
+        });
+      });
+    }
+    return call().then(function (res) {
+      if (res.error && res.error.code === 'bad_request' && size && /size/i.test(res.error.message || '')) { size = ''; return call(); }
+      return res;
+    }).then(function (res) { if (res.error && res.error.code === 'bad_request') res.error.code = 'api_error'; return res; }).catch(function (e) {
+      if (ctl.signal.aborted) return { error: { code: 'aborted' } };
+      return { error: { code: 'unavailable', message: navigator.onLine ? String(e && e.message || e) : 'No internet — AI needs a connection.' } };
+    }).then(function (r) { delete running[id]; return r; });
+  }
+
   // ---------- plug into the bridge ----------
   var hint = function (p) { var h = (ctl() && ctl().hints) || {}; return h[p] ? '••••' + h[p] : ''; };
   D.claude.status = function () { var x = st('claude'); return { hasKey: x !== 'off' && x !== 'none' && x !== 'locked', keyHint: hint('claude'), model: cfg().model || 'claude-sonnet-5-5', secure: true, ipad: x }; };
@@ -278,8 +317,10 @@
   D.claude.onDelta = function (f) { deltaFn = f; };
   D.claude.onPhase = function (f) { phaseFn = f; };
   D.claude.setModel = function () { return Promise.resolve({ ok: false, error: 'On the iPad, the models follow your PC.' }); };
-  D.openai.status = function () { var x = st('openai'), c = cfg(); return { hasKey: x !== 'off' && x !== 'none' && x !== 'locked', keyHint: hint('openai'), model: c.openaiModel || '', models: c.openaiModels || [], provider: c.punchProvider || 'claude', ipad: x }; };
+  D.openai.status = function () { var x = st('openai'), c = cfg(); return { hasKey: x !== 'off' && x !== 'none' && x !== 'locked', keyHint: hint('openai'), model: c.openaiModel || '', models: c.openaiModels || [], provider: c.punchProvider || 'claude', imageModels: c.openaiImageModels || [], imageModel: c.openaiImageModel || '', ipad: x }; };
   D.openai.json = function (id, prompt) { return openaiJson(id, prompt); };
+  D.openai.image = function (id, prompt, refs, opts) { return openaiImage(id, prompt, refs, opts); };
+  D.openai.setImageModel = function () { return Promise.resolve({ ok: false, error: 'On the iPad, the models follow your PC.' }); };
   D.openai.setModel = function () { return Promise.resolve({ ok: false, error: 'On the iPad, the models follow your PC.' }); };
   D.aiPad = { state: state, update: open, take: take, onChange: function (f) { listeners.push(f); return function () { var i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); }; } };
   window.addEventListener('online', changed); window.addEventListener('offline', changed);
