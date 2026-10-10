@@ -4,7 +4,7 @@
 // Plots: 'A' 'B' 'C', 'X' = all plots, 'U' = no plot yet (unassigned).
 (function (root) {
   'use strict';
-  var PLOTS = ['A', 'B', 'C', 'X', 'U'];
+  var PLOTS = ['A', 'B', 'C', 'D', 'E', 'X', 'U'];
   var cleanPlot = function (p) { p = String(p || '').toUpperCase(); if (p === 'ALL') p = 'X'; return PLOTS.indexOf(p) >= 0 ? p : 'U'; };
   var splitChars = function (s) { return Array.isArray(s) ? s.map(String) : String(s || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; }); };
 
@@ -115,14 +115,15 @@
     var L = ['You sort the scenes of a sitcom episode into its storylines. Read each scene and say which plot it belongs to.', ''];
     L.push('Episode: ' + ((ep && ep.code) || '') + ' “' + ((ep && ep.title) || '') + '”');
     L.push('Plots:');
-    ['A', 'B', 'C'].forEach(function (p) {
+    var keys = plotKeys(d, k);
+    keys.forEach(function (p) {
       var x = plots.filter(function (q) { return q.key === p; })[0] || {};
-      L.push(p + ' — ' + (x.name || names[p] || (p === 'A' ? 'main story' : p === 'B' ? 'second story' : 'runner')) + (x.characters && x.characters.length ? ' (people: ' + x.characters.join(', ') + ')' : '') + (x.want ? '; wants ' + x.want : ''));
+      L.push(p + ' — ' + (x.name || names[p] || (p === 'A' ? 'main story' : p === 'B' ? 'second story' : p === 'C' ? 'runner' : 'extra story')) + (x.characters && x.characters.length ? ' (people: ' + x.characters.join(', ') + ')' : '') + (x.want ? '; wants ' + x.want : ''));
     });
     L.push('X — the whole cast / every plot (cold opens, tags, group scenes that serve all plots)');
     L.push('', 'Scenes:');
     tl.forEach(function (t, i) { if (scope === 'all' || t.plot === 'U') L.push('#' + (i + 1) + ' ' + (t.title || '') + ' — ' + (t.summary || '') + (t.chars ? ' [in it: ' + t.chars + ']' : '') + (t.plot !== 'U' ? ' (now ' + t.plot + ')' : '')); });
-    L.push('', 'Reply with ONLY one JSON object: {"scenes": [{"n": scene number, "plot": "A"|"B"|"C"|"X", "why": a few words}]}');
+    L.push('', 'Reply with ONLY one JSON object: {"scenes": [{"n": scene number, "plot": ' + keys.concat(['X']).map(function (q) { return '"' + q + '"'; }).join('|') + ', "why": a few words}]}');
     return L.join('\n');
   }
   function readClaude(d, k, data) {
@@ -366,8 +367,14 @@
   function linkScript(d, k) { var sc = script(d, k), sv = inUse(d, k); if (!sc || !sv) return false; sc.from = sv.id; sc.fromN = sv.n; sc.linked = false; pair(d, k); return true; }
 
   // ---------- The "Assign plots" dialog (same in the Outline and the Timeline) ----------
-  var COL = { A: '#5b8def', B: '#3dbb85', C: '#f0675a', X: '#9b80f2', U: '#4a4f58' };
-  var LAB = { A: 'A', B: 'B', C: 'C', X: 'All', U: '?' };
+  var COL = { A: '#5b8def', B: '#3dbb85', C: '#f0675a', D: '#d77fd0', E: '#4fc1d6', X: '#9b80f2', U: '#4a4f58' };
+  var LAB = { A: 'A', B: 'B', C: 'C', D: 'D', E: 'E', X: 'All', U: '?' };
+  // the story plots this episode uses: A, B, C always; D and E only when the structure in use has them or a scene is in them
+  function plotKeys(d, k) {
+    var sv = inUse(d, k), have = {}; ((sv && sv.data && sv.data.plots) || []).forEach(function (p) { if (p.key) have[p.key] = 1; });
+    (timeline(d, k) || []).forEach(function (t) { have[t.plot] = 1; });
+    return ['A', 'B', 'C'].concat(['D', 'E'].filter(function (q) { return have[q]; }));
+  }
   function assignOpen(self, store, k) {
     var d = store.data, tl = timeline(d, k) || [], nU = tl.filter(function (t) { return t.plot === 'U'; }).length, scope = nU ? 'u' : 'all';
     self.setState({ asg: { how: 'cast', scope: scope, rows: suggestByCast(d, k, scope === 'all' ? 'all' : 'u'), menu: null, busy: false, err: '', cf: false } });
@@ -420,7 +427,7 @@
         return { title: r.title || 'Scene', why: r.why, label: LAB[r.plot] + ' ▾', c: COL[r.plot], fg: r.plot === 'U' || r.plot === 'X' ? '#ecebe8' : '#101114',
           was: ch ? 'was ' + (r.now === 'U' ? 'no plot' : (r.now === 'X' ? 'All' : r.now)) : '', menuOpen: open,
           toggle: function () { set({ menu: open ? null : r.id }); },
-          opts: ['A', 'B', 'C', 'X', 'U'].map(function (p) { return { label: p === 'X' ? 'All plots' : (p === 'U' ? 'No plot yet' : p + ' plot'), c: COL[p], pick: function () { set({ menu: null, rows: self.state.asg.rows.map(function (q) { return q.id === r.id ? Object.assign({}, q, { plot: p, why: 'Your pick' }) : q; }) }); } }; }) };
+          opts: plotKeys(d, k).concat(['X', 'U']).map(function (p) { return { label: p === 'X' ? 'All plots' : (p === 'U' ? 'No plot yet' : p + ' plot'), c: COL[p], pick: function () { set({ menu: null, rows: self.state.asg.rows.map(function (q) { return q.id === r.id ? Object.assign({}, q, { plot: p, why: 'Your pick' }) : q; }) }); } }; }) };
       }),
       asgApplyLabel: changes.length ? 'Apply to ' + changes.length + (changes.length === 1 ? ' scene' : ' scenes') : 'Nothing to change',
       asgApplyOp: changes.length ? 1 : 0.5,
@@ -469,7 +476,7 @@
     return L;
   }
 
-  root.SCLink = { PLOTS: PLOTS, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
+  root.SCLink = { PLOTS: PLOTS, plotKeys: plotKeys, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
     use: use, adopt: adopt, fromStruct: fromStruct, toStruct: toStruct, suggestByCast: suggestByCast, claudePrompt: claudePrompt, readClaude: readClaude,
     COL: COL, LAB: LAB, assignOpen: assignOpen, assignVals: assignVals,
     parseHeading: parseHeading, parse: parse, ensure: ensure, pace: pace, scriptLinked: scriptLinked, pair: pair, fromScript: fromScript, toScript: toScript,
