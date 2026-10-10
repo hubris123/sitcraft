@@ -178,7 +178,56 @@
   }
   // How fast a page plays: multi-camera ≈ 2 pages a minute; single-camera ≈ 1 a minute, faster for rapid-fire shows
   function pace(ep) { ep = ep || {}; var multi = ep.format === 'multi', p = ep.pacing || ((ep.jpm || 6) >= 6.5 ? 'rapid' : ((ep.jpm || 6) < 5 ? 'slow' : 'classic'));
-    return { multi: multi, ppm: multi ? 2 : (p === 'rapid' ? 1.5 : (p === 'slow' ? 1 : 1.2)) }; }
+    return { multi: multi, p: p, ppm: multi ? 2 : (p === 'rapid' ? 1.5 : (p === 'slow' ? 1 : 1.2)) }; }
+  // ---------- Estimate scene times: the page rule and a detailed estimate (dialog + action + laughs) ----------
+  var TGT = [2, 5.5, 6, 6, 1.5], ACTN2 = ['Cold Open', 'Act I', 'Act II', 'Act III', 'Tag'];
+  function rates(pc) {
+    pc = asPace(pc); var p = pc.p || 'classic';
+    return { wpm: p === 'rapid' ? 170 : (p === 'slow' ? 130 : 150), wordsPerSec: 4, minAction: 2, paren: 1, laugh: pc.multi ? 3.5 : 1.5, multi: !!pc.multi, p: p, ppm: pc.ppm };
+  }
+  var words = function (t) { var m = String(t || '').trim().match(/\S+/g); return m ? m.length : 0; };
+  function detail(b, pc) {
+    var R = rates(pc), dw = 0, act = 0, jokes = {};
+    b.els.forEach(function (e) {
+      if (e.type === 'dialogue') dw += words(e.text);
+      else if (e.type === 'action') { var w = words(e.text); if (w) act += Math.max(R.minAction, w / R.wordsPerSec); }
+      else if (e.type === 'paren') act += R.paren;
+      if (e.joke && e.joke.g != null) jokes[e.joke.g] = 1;
+    });
+    var dlg = dw / R.wpm * 60, laugh = Object.keys(jokes).length * R.laugh, sec = dlg + act + laugh;
+    return { dlg: dlg, act: act, laugh: laugh, jokes: Object.keys(jokes).length, minutes: Math.max(0.05, Math.round(sec / 3) / 20) };
+  }
+  // every timeline scene, in order, with both estimates (written scenes) and the act totals against the act targets
+  function estimate(d, k, pc) {
+    pc = asPace(pc); var sc = script(d, k), tl = timeline(d, k) || [], R = rates(pc), byTid = {};
+    if (sc && scriptLinked(d, k)) parse(sc.els).blocks.forEach(function (b) { if (b.h.tid) byTid[b.h.tid] = b; });
+    var acts = ACTN2.map(function (n, i) { return { i: i, name: n, tgt: TGT[i], page: 0, est: 0, cur: 0, n: 0 }; });
+    var scenes = tl.map(function (t, ix) {
+      var b = byTid[t.id], a = acts[Math.max(0, Math.min(4, t.act || 0))], cur = t.dur || 0;
+      var row = { id: t.id, n: ix + 1, title: t.title || t.location || 'Scene', location: t.location || '', plot: cleanPlot(t.plot || 'U'), act: a.i, cur: cur, durSet: !!t.durSet, durEst: !!t.durEst, written: !!b };
+      if (b) { var inf = blockInfo(b, pc), dt = detail(b, pc); row.pages = inf.pages; row.page = inf.minutes; row.dlg = dt.dlg; row.action = dt.act; row.laugh = dt.laugh; row.jokes = dt.jokes; row.est = dt.minutes;
+        var r = dt.minutes / Math.max(0.05, inf.minutes);
+        row.flag = r > 1.25 ? (dt.laugh > dt.act && dt.laugh > dt.dlg * 0.3 ? 'busy-laughs' : 'busy') : (r < 0.8 ? (dt.dlg >= dt.act ? 'talky' : 'sparse') : '');
+      }
+      a.page += b ? row.page : cur; a.est += b ? row.est : cur; a.cur += cur; a.n++;
+      return row;
+    });
+    var tot = { tgt: 21, page: 0, est: 0, cur: 0 }; acts.forEach(function (a) { tot.page += a.page; tot.est += a.est; tot.cur += a.cur; });
+    return { rates: R, scenes: scenes, acts: acts.filter(function (a) { return a.n; }), total: tot, written: scenes.filter(function (x) { return x.written; }).length };
+  }
+  // put the chosen estimate on these scenes (detailed ones keep following the script's detailed estimate as it's edited)
+  function applyEstimate(d, k, ids, mode, pc) {
+    var E = estimate(d, k, pc), tl = timeline(d, k); if (!tl) return 0; var want = {}, n = 0;
+    ids.forEach(function (id) { want[id] = 1; });
+    E.scenes.forEach(function (r) {
+      if (!want[r.id] || !r.written) return;
+      var i = tl.findIndex(function (t) { return t.id === r.id; }); if (i < 0) return;
+      var t = Object.assign({}, tl[i], { dur: mode === 'page' ? r.page : r.est, durSet: false, durEst: mode !== 'page' });
+      if (JSON.stringify(t) !== JSON.stringify(tl[i])) { tl[i] = t; n++; }
+    });
+    if (n) { mirror(d, k); bump(d, k); }
+    return n;
+  }
   function asPace(x) { return (x && typeof x === 'object') ? x : { multi: !!x, ppm: x ? 2 : 1 }; }
   function blockInfo(b, pc) {
     pc = asPace(pc); var multi = pc.multi;
@@ -240,7 +289,8 @@
       if (hpl !== lk.plot && hpl !== t.plot) { n.plot = hpl; lk.plot = hpl; lk.tplot = hpl; mark = true; }
       if (b.act !== t.act) { n.act = b.act; mark = true; }
       var ch = addSpeakers(t.chars, info.who, known); if (ch !== (t.chars || '')) n.chars = ch;
-      if (!t.durSet && Math.abs((t.dur || 0) - info.minutes) > 0.001) n.dur = info.minutes;   // a time the person set wins
+      var want = t.durEst ? detail(b, multi).minutes : info.minutes;   // a scene set to the detailed estimate keeps following it
+      if (!t.durSet && Math.abs((t.dur || 0) - want) > 0.001) n.dur = want;   // a time the person set wins
       n.w = true; n.pages = info.pages;
       if (mark) n.chg = { by: 'script', at: now };
       if (JSON.stringify(n) !== JSON.stringify(t)) { tl[rec.i] = n; changed = true; }
@@ -341,7 +391,7 @@
     var out = {};
     parse(sc.els).blocks.forEach(function (b) {
       var id = b.h.tid; if (!id || !byId[id]) return; var inf = blockInfo(b, multi), t = byId[id], lk = b.h.lk || {};
-      out[id] = { pages: inf.pages, minutes: inf.minutes, who: inf.who, heading: b.h.text, hid: b.h.id, changed: lk.sum !== undefined && String(t.summary || '').trim() !== String(lk.sum || '').trim() && !!String(t.summary || '').trim() };
+      out[id] = { pages: inf.pages, minutes: inf.minutes, est: detail(b, multi).minutes, durEst: !!t.durEst, who: inf.who, heading: b.h.text, hid: b.h.id, changed: lk.sum !== undefined && String(t.summary || '').trim() !== String(lk.sum || '').trim() && !!String(t.summary || '').trim() };
     });
     infoCache = { els: sc.els, k: k, multi: mk, v: out, tl: tl };
     return out;
@@ -479,6 +529,6 @@
   root.SCLink = { PLOTS: PLOTS, plotKeys: plotKeys, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
     use: use, adopt: adopt, fromStruct: fromStruct, toStruct: toStruct, suggestByCast: suggestByCast, claudePrompt: claudePrompt, readClaude: readClaude,
     COL: COL, LAB: LAB, assignOpen: assignOpen, assignVals: assignVals,
-    parseHeading: parseHeading, parse: parse, ensure: ensure, pace: pace, scriptLinked: scriptLinked, pair: pair, fromScript: fromScript, toScript: toScript,
+    parseHeading: parseHeading, parse: parse, ensure: ensure, pace: pace, rates: rates, estimate: estimate, applyEstimate: applyEstimate, scriptLinked: scriptLinked, pair: pair, fromScript: fromScript, toScript: toScript,
     removeFromScript: removeFromScript, scriptInfo: scriptInfo, keepScene: keepScene, replaceScene: replaceScene, linkScript: linkScript };
 })(typeof window !== 'undefined' ? window : globalThis);
