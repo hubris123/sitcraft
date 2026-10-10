@@ -461,7 +461,7 @@
       check: function () { return sync ? sync.tick().then(function () { return sync.status(); }) : Promise.resolve({}); },
       dismiss: function () { if (sync) sync.dismiss(); return Promise.resolve({ ok: true }); },
       rescuedData: function (id) { return sync ? sync.rescuedData(id) : Promise.resolve({ ok: false }); },
-      rescuedDone: function () { return Promise.resolve({ ok: false }); },
+      rescuedDone: function (id, how) { return sync ? sync.rescuedDone(String(id || ''), how ? String(how) : '') : Promise.resolve({ ok: false }); },
       loaded: function () { if (sync) sync.windowLoaded(); },
       onEvent: function (f) { fns.push(f); return function () { var i = fns.indexOf(f); if (i >= 0) fns.splice(i, 1); }; }
     }

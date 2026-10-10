@@ -39,6 +39,15 @@ const WHOLE_MAX = 16000;      // a section smaller than this travels as one piec
 const HISTORY_MAX = 40;
 const SEP = '\u0001';
 
+// renderer/merge.js: the per-item fingerprint each device keeps at its last sync (so "Unsaved changes" can tell who changed what)
+let MERGE = null;
+function mergeApi() {
+  if (MERGE) return MERGE;
+  try { if (typeof module === 'object' && typeof require === 'function') MERGE = require('./renderer/merge.js'); } catch (e) {}
+  if (!MERGE && typeof SCMerge !== 'undefined') MERGE = SCMerge;   // eslint-disable-line no-undef
+  return MERGE;
+}
+function baseOf(text) { try { const M = mergeApi(); return M && text ? M.fingerprint(text) : null; } catch (e) { return null; } }
 const kindName = (k) => k === 'ipad' ? 'iPad' : 'PC';
 function clock(t) { const d = new Date(t); const h = d.getHours(), m = d.getMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' AM' : ' PM'); }
 const sha = (s) => K.sha(s);
@@ -173,16 +182,18 @@ function createSync(o) {
   function replaceLocal(text, reason, extra) {
     s.block = true;
     local.write(text);
-    save({ syncHash: sha(slim(text)), syncDirtySince: 0 });
+    save({ syncHash: sha(slim(text)), syncDirtySince: 0, syncBase: baseOf(text) });
     emit('data', Object.assign({ reason }, extra || {}));
   }
   async function rescue(label) {
     const text = local.read();
     if (!text) return null;
     const file = label.replace(/[\\/:*?"<>|]/g, '.') + '.json';
-    let driveId = null;
-    try { local.rescue(file, text); } catch (e) {}
-    try { const folder = await drive.folder(RESCUE_FOLDER); driveId = await put(file + '.gz', K.gzip(text), 'application/gzip', folder); } catch (e) {}
+    let driveId = null, body = text;
+    // the fingerprint of this device's last sync goes with it, so the device in charge can tell what was changed here
+    try { const o = JSON.parse(text); o.rescue = { base: st.syncBase || null, from: devOf(me), at: new Date(now()).toISOString(), label }; body = JSON.stringify(o); } catch (e) {}
+    try { local.rescue(file, body); } catch (e) {}
+    try { const folder = await drive.folder(RESCUE_FOLDER); driveId = await put(file + '.gz', K.gzip(body), 'application/gzip', folder); } catch (e) {}
     return { label, file, driveId };
   }
   function unsyncedLabel() {
@@ -255,7 +266,7 @@ function createSync(o) {
     // Anything typed while uploading stays "dirty" and goes up next time
     const still = local.read() !== text;
     s.markedDirty = false;
-    save({ syncVersion: version, syncHash: h, syncLastUpload: t, syncDirtySince: still ? (st.syncDirtySince || t) : 0 });
+    save({ syncVersion: version, syncHash: h, syncLastUpload: t, syncDirtySince: still ? (st.syncDirtySince || t) : 0, syncBase: baseOf(text) });
     if (still) schedule();
     return { ok: true, sentParts: changed.length, sentBytes: sent, parts: names.length, bytes: total };
   }
@@ -443,11 +454,20 @@ function createSync(o) {
     } catch (e) { return { ok: false }; }
   });
 
-  // Rescued copies waiting to be filed under Versions & backup (by the device in charge)
+  // "Unsaved changes": rescued copies wait in the control file until the device in charge merges, overwrites with or discards
+  // them; then they move to the "handled" list (the copy itself stays in Drive › Rescued edits).
   const rescuedData = (id) => run(async () => { try { return { ok: true, data: K.gunzip(await drive.download(id)) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } });
-  const rescuedDone = (id) => run(async () => {
-    try { const c = await readControl(); if (c && c.rescued) { c.rescued = c.rescued.filter(x => x.id !== id); await writeControl(c); } ok(); status(true); return { ok: true }; }
-    catch (e) { fail(e); return { ok: false }; }
+  const rescuedDone = (id, how) => run(async () => {
+    try {
+      const c = await readControl();
+      if (c && c.rescued) {
+        const r = c.rescued.filter(x => x.id === id)[0];
+        c.rescued = c.rescued.filter(x => x.id !== id);
+        if (r && how) c.handled = (c.handled || []).concat([Object.assign({}, r, { how: String(how), doneAt: new Date(now()).toISOString(), by: devOf(me) })]).slice(-10);
+        await writeControl(c);
+      }
+      ok(); status(true); return { ok: true };
+    } catch (e) { fail(e); return { ok: false }; }
   });
   const dismiss = () => { notice(null); status(true); };
   // Pairing (and other small changes to the control file): read it fresh, change it, write it back — one job at a time
@@ -478,7 +498,7 @@ function createSync(o) {
       offline: s.offline, error: s.error, lastCheck: s.lastCheck,
       live: c && c.live ? c.live : null, lastSent: s.lastSent, lastGot: s.lastGot || null,
       history: c ? (c.history || []).slice(-12).reverse() : [],
-      notice: st.syncNotice || null, rescued: c && c.rescued ? c.rescued.slice() : [],
+      notice: st.syncNotice || null, rescued: c && c.rescued ? c.rescued.slice() : [], handled: c && c.handled ? c.handled.slice().reverse() : [],
       paired: c && c.paired ? c.paired : null, pairing: c && c.pairing ? { expires: c.pairing.expires, at: c.pairing.at } : null,
       // AI on the iPad: on/off, a fingerprint of the PC's keys (never the keys), the PC's model choices, who has the current keys
       ai: c && c.ai ? { on: !!c.ai.on, fp: c.ai.fp || '', cfg: c.ai.cfg || null, hints: c.ai.hints || null, got: c.ai.got || null, handoff: c.ai.handoff ? { name: c.ai.handoff.name, expires: c.ai.handoff.expires, kh: c.ai.handoff.kh, at: c.ai.handoff.at } : null } : null
