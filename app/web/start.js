@@ -224,7 +224,7 @@
   offlineSetup();
   function mountApp() { window.DC.mount('App', document.getElementById('app'), {}); W.booted(); mounted = true; }
   W.ready.then(function () { return W.redirected; }).then(function (back) {
-    if (!mem.device || !mem[W.DATA_KEY]) {
+    if (!mem.device || !W.hasData()) {
       // setting up: carry on after coming back from Google's sign-in page
       if (back && back.ok) { set({ email: back.email, step: 2, busy: 'Looking for your Sitcom Garage data…' }); return findData(); }
       if (back) S.err = 'Google sign-in didn’t finish: ' + back.error + '.';

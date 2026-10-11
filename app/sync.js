@@ -4,8 +4,11 @@
 //   SitCraft Live Index.json   — the list of pieces that make up the live copy, each with a fingerprint
 //   Live data/p-….json.gz      — the pieces: one per episode script / storyboard / timeline, one per show bible, the library, etc.
 //   Rescued edits/…            — edits a device couldn't upload before another device took control (never thrown away)
+//   Pieces/<name>.json.gz      — things that never change once made (a saved script version's lines…), stored once each
+//                                under a name made from their contents and shared by every copy that uses them
 // Only pieces whose fingerprint changed are uploaded or downloaded, so typing in one script sends only that episode.
-// The data file on each device stays one normal file; only the Drive copy is split.
+// Each device keeps the same pieces locally too (renderer/pieces.js; local.parts / local.replace / local.pieces); a device
+// that still has the old one-file data (local.read / local.write only) works as before.
 // No Electron in here, so it can be tested on its own (tools/test/sync-engine.js) with a pretend Drive.
 'use strict';
 // The few things that differ between the PC (Node) and the iPad (browser): hashing, zipping, text ⇄ bytes.
@@ -30,6 +33,7 @@ const CONTROL = 'SitCraft Control.json';
 const INDEX = 'SitCraft Live Index.json';
 const PARTS_FOLDER = 'Live data';
 const RESCUE_FOLDER = 'Rescued edits';
+const PIECES_FOLDER = 'Pieces';
 const QUIET_MS = 8000;        // upload this long after the last change…
 const MAX_WAIT_MS = 30000;    // …but never wait longer than this while changes keep coming
 const CHECK_MS = 10000;       // how often every device peeks at the control file
@@ -52,6 +56,20 @@ const kindName = (k) => k === 'ipad' ? 'iPad' : 'PC';
 function clock(t) { const d = new Date(t); const h = d.getHours(), m = d.getMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' AM' : ' PM'); }
 const sha = (s) => K.sha(s);
 const partFile = (name) => 'p-' + sha(name).slice(0, 24) + '.json.gz';
+// The content pieces a live piece points to (a script version's lines: "elsRef":"<name>")
+const REF_RE = /"elsRef":"([0-9a-f]{14}-[0-9a-z]+)"/g;
+function refsIn(text) { const out = []; let m; REF_RE.lastIndex = 0; while ((m = REF_RE.exec(text || ''))) out.push(m[1]); return out; }
+// slimObj for pieces that are already split (only the Versions & backup list can hold such contents)
+function slimParts(parts) {
+  const pre = 'data' + SEP + 'backups'; let out = parts;
+  const f = (a) => Array.isArray(a) ? a.map(x => (x && x.driveId && x.data) ? Object.assign({}, x, { data: '' }) : x) : a;
+  Object.keys(parts).forEach(n => {
+    if (n !== pre && n.indexOf(pre + SEP) !== 0) return;
+    const t = parts[n]; if (typeof t !== 'string' || t.indexOf('"driveId"') < 0) return;
+    try { let v = JSON.parse(t); if (n === pre) Object.keys(v || {}).forEach(k => { v[k] = f(v[k]); }); else v = f(v); if (out === parts) out = Object.assign({}, parts); out[n] = JSON.stringify(v); } catch (e) {}
+  });
+  return out;
+}
 
 // Version contents that are already safe in Drive are left out of the live copy (their files are fetched from Drive when needed)
 function slimObj(o) {
@@ -118,6 +136,49 @@ function createSync(o) {
   };
   const ok = () => { s.offline = false; s.error = ''; };
 
+  // ---- this device's live copy, as pieces ----
+  const shaMemo = {};   // a piece's fingerprint is only worked out again when its text changed
+  const partSha = (n, t) => { const m = shaMemo[n]; if (m && m[0] === t) return m[1]; const h = sha(t); shaMemo[n] = [t, h]; return h; };
+  const liveHash = (live) => live ? sha(Object.keys(live.parts).sort().map(n => n + '\u0002' + partSha(n, live.parts[n])).join('\u0003')) : '';
+  const liveText = (live) => join(live.meta || { format: 'sitcom-writer/app-data', version: 1 }, live.parts, live.savedAt);
+  function localLive() {
+    if (local.parts) { const p = local.parts(); return p ? { meta: p.meta, parts: slimParts(p.parts), savedAt: p.savedAt } : null; }
+    const t = local.read(); if (!t) return null;
+    const sp = split(t); return { meta: sp.meta, parts: sp.parts };
+  }
+  function writeLocal(live) { if (local.replace) local.replace(live); else local.write(liveText(live)); }
+  // The fingerprint saved at the last sync used to be over the whole file: switch it to the pieces (same data → same answer)
+  if (st.syncHashKind !== 'parts') {
+    try { const t = local.read(); const h = (t && st.syncHash && sha(slim(t)) === st.syncHash) ? liveHash(localLive()) : st.syncHash; save({ syncHash: h || '', syncHashKind: 'parts' }); } catch (e) {}
+  }
+  // ---- content pieces in Drive (Pieces/<name>.json.gz) ----
+  s.upPieces = {};
+  async function sendPieces(texts) {
+    const want = {}; texts.forEach(t => refsIn(t).forEach(h => { want[h] = 1; }));
+    return upPieces(Object.keys(want));
+  }
+  async function upPieces(list) {
+    if (!local.pieces) return 0;
+    const hs = list.filter(h => !s.upPieces[h]); if (!hs.length) return 0;
+    const folder = await drive.folder(PIECES_FOLDER); let n = 0;
+    await pool(hs, 4, async (h) => {
+      if (await fileId(h + '.json.gz', folder)) { s.upPieces[h] = 1; return; }
+      const t = local.pieces.get(h); if (t == null) return;      // not on this device: nothing to send
+      s.ids[folder + '/' + h + '.json.gz'] = await drive.create(h + '.json.gz', K.gzip(t), 'application/gzip', folder);
+      s.upPieces[h] = 1; n++;
+    });
+    return n;
+  }
+  async function getPiece(h) {
+    if (!local.pieces) return false;
+    if (local.pieces.has(h)) return true;
+    const folder = await drive.folder(PIECES_FOLDER);
+    const id = await fileId(h + '.json.gz', folder);
+    if (!id) return false;
+    local.pieces.put(h, K.gunzip(await drive.download(id)));
+    return true;
+  }
+
   async function fileId(name, parent) {
     const key = (parent || 'root') + '/' + name;
     if (s.ids[key]) return s.ids[key];
@@ -163,9 +224,9 @@ function createSync(o) {
     const idx = await readIndex(version);
     if (!idx) return null;
     let mine = {};
-    try { const t = local.read(); if (t) mine = split(t).parts; } catch (e) {}
+    try { const l = localLive(); if (l) mine = l.parts; } catch (e) {}
     const names = Object.keys(idx.parts || {}), parts = {};
-    const need = names.filter(n => !(mine[n] != null && sha(mine[n]) === idx.parts[n].h));
+    const need = names.filter(n => !(mine[n] != null && partSha(n, mine[n]) === idx.parts[n].h));
     names.forEach(n => { if (need.indexOf(n) < 0) parts[n] = mine[n]; });
     let got = 0;
     await pool(need, 4, async (n) => {
@@ -175,14 +236,19 @@ function createSync(o) {
       parts[n] = txt; got += p.b || 0;
     });
     s.lastGot = { parts: need.length, bytes: got };
-    return join(idx.meta || { format: 'sitcom-writer/app-data', version: 1 }, parts, idx.savedAt);
+    // the content pieces the new pieces point to come down too, so e.g. restoring a script version works offline
+    if (local.pieces) {
+      const hs = {}; need.forEach(n => refsIn(parts[n]).forEach(h => { if (!local.pieces.has(h)) hs[h] = 1; }));
+      await pool(Object.keys(hs), 4, async (h) => { try { await getPiece(h); } catch (e) {} });
+    }
+    return { meta: idx.meta || { format: 'sitcom-writer/app-data', version: 1 }, parts, savedAt: idx.savedAt };
   }
   // Replace this device's data file with the Drive copy. The window is asked to reload; until it reads the
   // new file back, its old in-memory copy is not allowed to save over it.
-  function replaceLocal(text, reason, extra) {
+  function replaceLocal(live, reason, extra) {
     s.block = true;
-    local.write(text);
-    save({ syncHash: sha(slim(text)), syncDirtySince: 0, syncBase: baseOf(text) });
+    writeLocal(live);
+    save({ syncHash: liveHash(live), syncDirtySince: 0, syncBase: baseOf(liveText(live)) });
     emit('data', Object.assign({ reason }, extra || {}));
   }
   async function rescue(label) {
@@ -201,7 +267,7 @@ function createSync(o) {
     const d = new Date(now());
     return 'Unsynced ' + kindName(me.kind) + ' edits · ' + (a.slice(-2) === b.slice(-2) ? a.slice(0, -3) : a) + '–' + b + ' · ' + d.toLocaleString('en-US', { month: 'short' }) + ' ' + d.getDate() + ' ' + d.getFullYear();
   }
-  const hasUnsynced = () => { const t = local.read(); return !!(t && sha(slim(t)) !== st.syncHash); };
+  const hasUnsynced = () => { const l = localLive(); return !!(l && liveHash(l) !== st.syncHash); };
 
   // Another device is now in charge. Keep anything we hadn't uploaded, then take the Drive copy and view only.
   async function overruled(c) {
@@ -219,9 +285,9 @@ function createSync(o) {
 
   async function uploadNow() {
     if (!st.syncOn || !st.syncPrimary) return { ok: true, skipped: true };
-    const text = local.read();
-    if (!text) return { ok: true, skipped: true };
-    const body = slim(text), h = sha(body);
+    const live = localLive();
+    if (!live) return { ok: true, skipped: true };
+    const h = liveHash(live);
     const c = await readControl();
     if (c && c.primary && !isMe(c.primary)) { await overruled(c); return { ok: false, taken: true }; }
     if (c && (c.version || 0) > st.syncVersion) {
@@ -236,11 +302,11 @@ function createSync(o) {
       return { ok: false, conflict: true };
     }
     if (h === st.syncHash && c) { save({ syncDirtySince: 0 }); return { ok: true, same: true }; }
-    const sp = split(text);
+    const sp = live;
     const old = (c && await readIndex(c.version)) || { parts: {} };
     const folder = await drive.folder(PARTS_FOLDER);
     const names = Object.keys(sp.parts), parts = {};
-    const changed = names.filter(n => { const hh = sha(sp.parts[n]); parts[n] = { h: hh }; return !(old.parts && old.parts[n] && old.parts[n].h === hh && old.parts[n].id); });
+    const changed = names.filter(n => { const hh = partSha(n, sp.parts[n]); parts[n] = { h: hh }; return !(old.parts && old.parts[n] && old.parts[n].h === hh && old.parts[n].id); });
     names.forEach(n => { if (changed.indexOf(n) < 0) { parts[n].id = old.parts[n].id; parts[n].b = old.parts[n].b; } });
     let sent = 0;
     await pool(changed, 4, async (n) => {
@@ -248,6 +314,8 @@ function createSync(o) {
       parts[n].id = await put(partFile(n), gz, 'application/gzip', folder, old.parts && old.parts[n] && old.parts[n].id);
       parts[n].b = gz.length; sent += gz.length;
     });
+    // the content pieces those point to go up before the list that names them
+    const sentPieces = await sendPieces(changed.map(n => sp.parts[n]));
     const t = now(), version = (st.syncVersion || 0) + 1, iso = new Date(t).toISOString();
     const idx = { format: 'sitcraft/live-index', v: 1, version, savedAt: iso, savedBy: devOf(me), meta: sp.meta, parts };
     await put(INDEX, K.bytes(JSON.stringify(idx)), 'application/json');
@@ -259,14 +327,14 @@ function createSync(o) {
     });
     if (!c) { nc.takenAt = iso; log(nc, 'start'); }
     await writeControl(nc);
-    s.lastBeat = t; s.lastSent = { parts: changed.length, bytes: sent };
+    s.lastBeat = t; s.lastSent = { parts: changed.length, bytes: sent, pieces: sentPieces };
     // Pieces nobody uses any more (a deleted episode) are tidied away
     const gone = Object.keys(old.parts || {}).filter(n => !parts[n] && old.parts[n].id);
     await pool(gone, 4, async (n) => { try { await drive.remove(old.parts[n].id); } catch (e) {} });
     // Anything typed while uploading stays "dirty" and goes up next time
-    const still = local.read() !== text;
+    const still = liveHash(localLive()) !== h;
     s.markedDirty = false;
-    save({ syncVersion: version, syncHash: h, syncLastUpload: t, syncDirtySince: still ? (st.syncDirtySince || t) : 0, syncBase: baseOf(text) });
+    save({ syncVersion: version, syncHash: h, syncLastUpload: t, syncDirtySince: still ? (st.syncDirtySince || t) : 0, syncBase: baseOf(liveText(live)) });
     if (still) schedule();
     return { ok: true, sentParts: changed.length, sentBytes: sent, parts: names.length, bytes: total };
   }
@@ -363,8 +431,8 @@ function createSync(o) {
         else await uploadNow();
       } else {
         const text = await downloadLive(c.version);
-        const mine = local.read();
-        const rescued = (mine && text != null && sha(slim(mine)) !== sha(slim(text))) ? await rescue('This ' + kindName(me.kind) + '’s copy before sync · ' + clock(now()) + ' · ' + new Date(now()).toDateString().slice(4)) : null;
+        const mine = localLive();
+        const rescued = (mine && text != null && liveHash(mine) !== liveHash(text)) ? await rescue('This ' + kindName(me.kind) + '’s copy before sync · ' + clock(now()) + ' · ' + new Date(now()).toDateString().slice(4)) : null;
         save({ syncPrimary: false, syncVersion: c.version || 0 });
         if (rescued) await register(rescued);
         if (text != null) replaceLocal(text, 'joined', { rescued, primary: devOf(c.primary) });
@@ -509,9 +577,13 @@ function createSync(o) {
   }
 
   if (st.syncOn) { start(); T.set(() => tick(), 0); }
-  return { status, enable, disable, localChanged, sleeping, woke, rescuedData, rescuedDone, dismiss, peek, updateControl, sha: (x) => sha(x), blocksWrites, windowLoaded, tick, flush, makePrimary, forceTakeover, closing, stop };
+  // A content piece this device doesn't have yet (e.g. an old script version's lines), straight from Drive
+  // Content pieces a show version (Versions & backup) uses go up to Drive › Pieces before its list does — sync on or off
+  const sharePieces = (hs) => run(async () => { try { const n = await upPieces((hs || []).map(String)); return { ok: true, sent: n }; } catch (e) { return { ok: false, code: (e && e.code) || 'drive_error', error: String((e && e.message) || e) }; } });
+  const fetchPiece = (h) => run(async () => { try { const got = await getPiece(h); return { ok: got, text: got ? local.pieces.get(h) : null }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } });
+  return { status, fetchPiece, sharePieces, enable, disable, localChanged, sleeping, woke, rescuedData, rescuedDone, dismiss, peek, updateControl, sha: (x) => sha(x), blocksWrites, windowLoaded, tick, flush, makePrimary, forceTakeover, closing, stop };
 }
 
-const SYNC_API = { createSync, configure, slim, split, join, CONTROL, INDEX, PARTS_FOLDER, RESCUE_FOLDER, timings: { QUIET_MS, MAX_WAIT_MS, CHECK_MS, BEAT_MS, AWAY_MS, WHOLE_MAX } };
+const SYNC_API = { createSync, configure, slim, split, join, refsIn, CONTROL, INDEX, PARTS_FOLDER, RESCUE_FOLDER, PIECES_FOLDER, timings: { QUIET_MS, MAX_WAIT_MS, CHECK_MS, BEAT_MS, AWAY_MS, WHOLE_MAX } };
 if (typeof module !== 'undefined' && module.exports) module.exports = SYNC_API;
 else if (typeof window !== 'undefined') window.SitSync = SYNC_API;

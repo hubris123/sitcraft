@@ -47,6 +47,21 @@
   }
   var flushed = function () { return pending; };
 
+  // ---------------- the show data in pieces (renderer/pieces.js) — same layout as the PC's Documents\SitCraft\Data ----------------
+  // 'd:index' lists the pieces, 'd:p/…' one piece each (only changed ones are written), 'd:c/…' content pieces stored once.
+  // The old one-entry data (DATA_KEY) is read until the first save in pieces, then kept under 'old:' + DATA_KEY.
+  var dataStore = window.SCPieces.createStore({
+    read: function (k) { var v = mem['d:' + k]; return v === undefined ? null : v; },
+    write: function (k, t) { persist('d:' + k, t); },
+    remove: function (k) { persist('d:' + k, undefined); },
+    has: function (k) { return mem['d:' + k] !== undefined; }
+  });
+  function keepLegacy() { if (mem[DATA_KEY] !== undefined) { persist('old:' + DATA_KEY, mem[DATA_KEY]); persist(DATA_KEY, undefined); } }
+  function dataSave(meta, changed, removed) { var first = !dataStore.exists(), r = dataStore.save(meta, changed, removed); if (first) keepLegacy(); return r; }
+  function dataReplace(live) { var first = !dataStore.exists(), r = dataStore.replace(live.meta, live.parts, live.savedAt); if (first) keepLegacy(); return r; }
+  function dataText() { var c = dataStore.load(); return c ? window.SitSync.join(c.meta, c.parts, c.savedAt) : (mem[DATA_KEY] || null); }
+  var hasData = function () { return dataStore.exists() || !!mem[DATA_KEY]; };
+
   // ---------------- Sign-in log: why the "tap to reconnect" bar appears (App settings → iPad shows it) ----------------
   function logSign(ev, x) {
     var L = (mem.signLog || []).concat([Object.assign({ at: Date.now(), ev: ev }, x || {})]);
@@ -351,7 +366,14 @@
     if (sync || !mem.device) return sync;
     sync = window.SitSync.createSync({
       drive: drive, device: mem.device, emit: emit,
-      local: { read: function () { return mem[DATA_KEY] || null; }, write: function (t) { persist(DATA_KEY, t); }, rescue: function (f, t) { persist('rescue:' + f, t); } },
+      local: {
+        parts: function () { var c = dataStore.load(); if (c) return { meta: c.meta, parts: c.parts, savedAt: c.savedAt }; var t = mem[DATA_KEY]; return t ? window.SitSync.split(t) : null; },
+        replace: function (live) { dataReplace(live); },
+        read: dataText,
+        write: function (t) { var sp = window.SitSync.split(t); dataReplace({ meta: sp.meta, parts: sp.parts }); },
+        rescue: function (f, t) { persist('rescue:' + f, t); },
+        pieces: { has: function (h) { return dataStore.pieceHas(h); }, get: function (h) { return dataStore.pieceGet(h); }, put: function (h, t) { return dataStore.piecePut(h, t); } }
+      },
       settings: { get: settingsGet, set: settingsSet },
       timers: syncTimers
     });
@@ -379,14 +401,26 @@
   var D = {
     isDesktop: true, isIPad: true,
     store: {
-      getItem: function (k) { return mem['ls:' + k] !== undefined ? mem['ls:' + k] : (k === DATA_KEY ? (mem[DATA_KEY] || null) : null); },
+      getItem: function (k) { return mem['ls:' + k] !== undefined ? mem['ls:' + k] : (k === DATA_KEY ? dataText() : null); },
       setItem: function (k, v) {
         v = String(v);
         if ((k === DATA_KEY || k === DATA_KEY + '.bak') && sync && sync.blocksWrites()) return;
-        if (k === DATA_KEY) { persist(DATA_KEY, v); if (sync) sync.localChanged(); return; }
+        if (k === DATA_KEY) { var sp = window.SitSync.split(v); dataReplace({ meta: sp.meta, parts: sp.parts }); if (sync) sync.localChanged(); return; }
         persist('ls:' + k, v);
       },
       removeItem: function (k) { if (k === DATA_KEY) return; persist('ls:' + k, undefined); }
+    },
+    // the show data in pieces (App.dc.html load / saveNow / quietUpdate)
+    data: {
+      load: function () { var c = dataStore.load(); return c ? { meta: c.meta, savedAt: c.savedAt, parts: Object.assign({}, c.parts), missing: c.missing } : { legacy: mem[DATA_KEY] || null }; },
+      save: function (meta, changed, removed) {
+        if (sync && sync.blocksWrites()) return { ok: true, ignored: true };
+        var r = dataSave(meta, changed || {}, removed || []); if (sync) sync.localChanged(); return Object.assign({ ok: true }, r);
+      },
+      pieceGet: function (h) { return dataStore.pieceGet(h); },
+      piecePut: function (h, t) { dataStore.piecePut(h, t); },
+      pieceFetch: function (h) { return sync ? sync.fetchPiece(h) : Promise.resolve({ ok: false }); },
+      pieceShare: function (hs) { return sync ? sync.sharePieces(hs) : Promise.resolve({ ok: false, code: 'drive_off' }); }
     },
     paths: function () { return { docs: 'This iPad (kept in sync with Google Drive)', dataFile: 'This iPad · Google Drive › SitCraft Backups' }; },
     reveal: function () { return Promise.resolve({ ok: true }); },
@@ -470,7 +504,7 @@
 
   // For the start-up and setup screens (web/start.js)
   var W0 = window.SC_WEB = {
-    DATA_KEY: DATA_KEY, mem: mem, persist: persist, flushed: flushed,
+    DATA_KEY: DATA_KEY, mem: mem, persist: persist, flushed: flushed, dataText: dataText, hasData: hasData,
     ready: loadAll(),
     redirected: null,
     signIn: signIn, signInRedirect: signInRedirect, standalone: standalone, tokenOk: tokenOk, findRoot: findRoot, drive: drive,
