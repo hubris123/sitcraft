@@ -10,7 +10,7 @@
   'use strict';
   var SEP = '\u0001';
   // Never merged: this device's own settings, versions (safe in Drive), the delete PIN, the timeline revision counter (bumped automatically)
-  var SKIP = { tlLock: 1, plotAI: 1, openSettings: 1, currentEp: 1, bibleShow: 1, scriptZoom: 1, backupReq: 1, claudeReady: 1, claudeModel: 1, punchAI: 1, punchModel: 1,
+  var SKIP = { tlLock: 1, plotAI: 1, scriptPrefs: 1, openSettings: 1, currentEp: 1, bibleShow: 1, scriptZoom: 1, backupReq: 1, claudeReady: 1, claudeModel: 1, punchAI: 1, punchModel: 1,
     suggestChips: 1, wgaAuto: 1, sbDetail: 1, sbAutoFix: 1, backups: 1, deletePin: 1, timelineRev: 1, deviceUi: 1 };
 
   function hash(s) {   // FNV-1a, 2 × 32 bit — only to notice a change, not for security
