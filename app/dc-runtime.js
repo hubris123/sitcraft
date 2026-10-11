@@ -166,6 +166,16 @@
   Host.prototype.componentDidMount = function () { LIVE[this.props.cname] = this; this._didMount(); };
   Host.prototype._didMount = function () { if (this.logic && this.logic.componentDidMount) { try { this.logic.componentDidMount(); } catch (e) { console.error('[dc] ' + this.props.cname + ' componentDidMount', e); } } };
   Host.prototype.componentWillUnmount = function () { if (LIVE[this.props.cname] === this) delete LIVE[this.props.cname]; this._dead = true; if (this.logic && this.logic.componentWillUnmount) { try { this.logic.componentWillUnmount(); } catch (e) { console.error(e); } } };
+  // A screen only redraws itself (its own setState / store subscription / forceUpdate). When the App redraws — e.g. the
+  // three steps of a screen change, or the save chip — a screen whose props (go, store, gen) didn't change is skipped.
+  // This made switching screens slow on the iPad: every App step redrew all six screens.
+  Host.prototype.shouldComponentUpdate = function (np) {
+    var a = this.props.props || {}, b = np.props || {};
+    if (np.cname !== this.props.cname) return true;
+    var ka = Object.keys(a), kb = Object.keys(b); if (ka.length !== kb.length) return true;
+    for (var i = 0; i < kb.length; i++) if (a[kb[i]] !== b[kb[i]]) return true;
+    return false;
+  };
   Host.prototype.render = function () {
     this.ensure();
     if (this.err) return h('pre', { style: 'color:#f5a39b;padding:20px;white-space:pre-wrap;font:12px monospace' }, this.err);
