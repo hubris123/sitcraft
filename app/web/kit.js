@@ -1,4 +1,4 @@
-// SitCraft iPad app — the browser's versions of the sync engine's helpers (hashing, zipping, text ⇄ bytes).
+// Sitcom Garage iPad app — the browser's versions of the sync engine's helpers (hashing, zipping, text ⇄ bytes).
 // sha-256 is plain JavaScript so it can run without waiting (the engine expects an instant answer); zipping uses pako.
 (function () {
   'use strict';

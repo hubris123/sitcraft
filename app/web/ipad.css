@@ -1,4 +1,4 @@
-/* SitCraft iPad app — touch-friendly adjustments (iPad only; the PC never loads this file) */
+/* Sitcom Garage iPad app — touch-friendly adjustments (iPad only; the PC never loads this file) */
 /* Bigger tap targets: small buttons and tabs get at least 40 px of height (switches keep their own size) */
 button:not(.sw):not(.fibtn):not(.zb):not(.zb2):not([role=switch]):not([role=radio]), [role=tab] { min-height: 40px; }
 /* the floating zoom box in the script editor: zoom buttons 32 px (20% under the usual 40), Undo / Hide keyboard a bit shorter */

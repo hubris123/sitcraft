@@ -1,10 +1,10 @@
-// SitCraft iPad app — offline support (a "service worker"). It keeps a copy of every app file on the iPad so Sitcom Garage opens
+// Sitcom Garage iPad app — offline support (a "service worker"). It keeps a copy of every app file on the iPad so Sitcom Garage opens
 // and works with no internet. Your shows themselves live in the iPad's storage (IndexedDB), not here.
 // A new version of the app is downloaded quietly in the background and only switched to when you tap "update"
 // (or the next time Sitcom Garage starts before anything is open), so the app never changes under you while you write.
 // tools/build-web.js fills in the build stamp and the file list.
 'use strict';
-var BUILD = 'a780f30383f3';
+var BUILD = '54759b790680';
 var FILES = ["index.html","brand/icon.png","brand/logo.svg","brand/mark.svg","busy.js","dc-runtime.js","desktop-shim.js","format.js","library.js","link.js","manifest.webmanifest","merge.js","orbit.js","pieces.js","plotai.js","screens.js","split.js","sync.js","vendor/fonts.css","vendor/fonts/courier-prime-latin-400-italic.woff2","vendor/fonts/courier-prime-latin-400-normal.woff2","vendor/fonts/courier-prime-latin-700-italic.woff2","vendor/fonts/courier-prime-latin-700-normal.woff2","vendor/fonts/geist-mono-latin-400-normal.woff2","vendor/fonts/geist-mono-latin-500-normal.woff2","vendor/fonts/geist-mono-latin-600-normal.woff2","vendor/fonts/geist-sans-latin-400-normal.woff2","vendor/fonts/geist-sans-latin-500-normal.woff2","vendor/fonts/geist-sans-latin-600-normal.woff2","vendor/fonts/geist-sans-latin-700-normal.woff2","vendor/pdfjs/LICENSE.txt","vendor/pdfjs/README.txt","vendor/pdfjs/pdf.min.js","vendor/pdfjs/pdf.worker.min.js","vendor/preact.min.umd.js","web/ai.js","web/bridge.js","web/icons/icon-180.png","web/icons/icon-192.png","web/icons/icon-512.png","web/ipad.css","web/kit.js","web/start.js","web/vendor/jsQR-LICENSE.txt","web/vendor/jsQR.js","web/vendor/pako-LICENSE.txt","web/vendor/pako.min.js"];
 var CACHE = 'sitcraft-' + BUILD;
 var INDEX = new URL('index.html', self.registration.scope).href;

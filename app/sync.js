@@ -1,7 +1,7 @@
 // Sitcom Garage — Drive sync: one device in charge ("primary") at a time, the others view only.
-// Everything travels through the writer's own Google Drive folder "SitCraft Backups":
-//   SitCraft Control.json      — who is in charge, the data version, a heartbeat, a handoff request, the history log (tiny; checked often)
-//   SitCraft Live Index.json   — the list of pieces that make up the live copy, each with a fingerprint
+// Everything travels through the writer's own Google Drive folder "Sitcom Garage Backups" (was "SitCraft Backups"):
+//   Sitcom Garage Control.json      — who is in charge, the data version, a heartbeat, a handoff request, the history log (tiny; checked often)
+//   Sitcom Garage Live Index.json   — the list of pieces that make up the live copy, each with a fingerprint
 //   Live data/p-….json.gz      — the pieces: one per episode script / storyboard / timeline, one per show bible, the library, etc.
 //   Rescued edits/…            — edits a device couldn't upload before another device took control (never thrown away)
 //   Pieces/<name>.json.gz      — things that never change once made (a saved script version's lines…), stored once each
@@ -29,8 +29,11 @@ const K = (function () {
 })();
 function configure(k) { Object.assign(K, k || {}); }
 
-const CONTROL = 'SitCraft Control.json';
-const INDEX = 'SitCraft Live Index.json';
+const CONTROL = 'Sitcom Garage Control.json';
+const INDEX = 'Sitcom Garage Live Index.json';
+// their names before Sitcom Garage: found and renamed once (a device still on the old version looks for the old names,
+// so it needs the update — the iPad offers it with a tap)
+const OLD_FILES = { 'Sitcom Garage Control.json': 'SitCraft Control.json', 'Sitcom Garage Live Index.json': 'SitCraft Live Index.json' };
 const PARTS_FOLDER = 'Live data';
 const RESCUE_FOLDER = 'Rescued edits';
 const PIECES_FOLDER = 'Pieces';
@@ -182,7 +185,11 @@ function createSync(o) {
   async function fileId(name, parent) {
     const key = (parent || 'root') + '/' + name;
     if (s.ids[key]) return s.ids[key];
-    const id = await drive.find(name, parent || null);
+    let id = await drive.find(name, parent || null);
+    if (!id && !parent && OLD_FILES[name]) {
+      id = await drive.find(OLD_FILES[name], null);
+      if (id && drive.rename) { try { await drive.rename(id, name); } catch (e) {} }
+    }
     if (id) s.ids[key] = id;
     return id;
   }
@@ -584,6 +591,6 @@ function createSync(o) {
   return { status, fetchPiece, sharePieces, enable, disable, localChanged, sleeping, woke, rescuedData, rescuedDone, dismiss, peek, updateControl, sha: (x) => sha(x), blocksWrites, windowLoaded, tick, flush, makePrimary, forceTakeover, closing, stop };
 }
 
-const SYNC_API = { createSync, configure, slim, split, join, refsIn, CONTROL, INDEX, PARTS_FOLDER, RESCUE_FOLDER, PIECES_FOLDER, timings: { QUIET_MS, MAX_WAIT_MS, CHECK_MS, BEAT_MS, AWAY_MS, WHOLE_MAX } };
+const SYNC_API = { OLD_FILES, createSync, configure, slim, split, join, refsIn, CONTROL, INDEX, PARTS_FOLDER, RESCUE_FOLDER, PIECES_FOLDER, timings: { QUIET_MS, MAX_WAIT_MS, CHECK_MS, BEAT_MS, AWAY_MS, WHOLE_MAX } };
 if (typeof module !== 'undefined' && module.exports) module.exports = SYNC_API;
 else if (typeof window !== 'undefined') window.SitSync = SYNC_API;

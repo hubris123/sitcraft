@@ -1,6 +1,6 @@
-// SitCraft iPad app — the iPad's version of the PC's bridge (preload.js + main.js), so the same screens run unchanged.
+// Sitcom Garage iPad app — the iPad's version of the PC's bridge (preload.js + main.js), so the same screens run unchanged.
 //   storage  → IndexedDB on the iPad (loaded into memory before the screens start)
-//   Drive    → Google sign-in in the browser (the "SitCraft iPad" Web client) + Drive over https
+//   Drive    → Google sign-in in the browser (the Google sign-in Web client for the iPad, named "SitCraft iPad" in Google Cloud) + Drive over https
 //   sync     → the same sync.js engine as the PC (device kind 'ipad')
 //   deleting → never on the iPad ("Delete on your PC"); AI → not yet (stage 3)
 (function () {
@@ -9,7 +9,7 @@
   var CLIENT_ID = '887682540626-40gmhov9d4sv3tat6pcbo4krbfeqk3pf.apps.googleusercontent.com';
   var SCOPE = 'https://www.googleapis.com/auth/drive.file openid email';
   var G = 'https://www.googleapis.com';
-  var ROOT = 'SitCraft Backups';
+  var ROOT = 'Sitcom Garage Backups', OLD_ROOT = 'SitCraft Backups';   // the folder's name before Sitcom Garage (the PC renames it)
   var K = window.SC_KIT;
 
   // ---------------- storage (IndexedDB, mirrored in memory so reads are instant) ----------------
@@ -47,7 +47,7 @@
   }
   var flushed = function () { return pending; };
 
-  // ---------------- the show data in pieces (renderer/pieces.js) — same layout as the PC's Documents\SitCraft\Data ----------------
+  // ---------------- the show data in pieces (renderer/pieces.js) — same layout as the PC's Documents\Sitcom Garage\Data ----------------
   // 'd:index' lists the pieces, 'd:p/…' one piece each (only changed ones are written), 'd:c/…' content pieces stored once.
   // The old one-entry data (DATA_KEY) is read until the first save in pieces, then kept under 'old:' + DATA_KEY.
   var dataStore = window.SCPieces.createStore({
@@ -248,8 +248,8 @@
   function esc(n) { return String(n).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
   function findRoot() {
     if (rootId) return Promise.resolve(rootId);
-    return gcall(G + '/drive/v3/files?fields=files(id,name)&q=' + q("mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + ROOT + "'")).then(function (r) { return r.json(); }).then(function (j) {
-      if (!j.files || !j.files.length) throw Object.assign(new Error('Your “SitCraft Backups” folder wasn’t found in Google Drive. Turn on Drive sync on your PC first.'), { code: 'no_data' });
+    return gcall(G + '/drive/v3/files?fields=files(id,name)&q=' + q("mimeType='application/vnd.google-apps.folder' and trashed=false and (name='" + ROOT + "' or name='" + OLD_ROOT + "')")).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.files || !j.files.length) throw Object.assign(new Error('Your “Sitcom Garage Backups” folder wasn’t found in Google Drive. Turn on Drive sync on your PC first.'), { code: 'no_data' });
       rootId = j.files[0].id; return rootId;
     });
   }
@@ -275,6 +275,7 @@
     update: function (id, bytes, mime) { return gcall(G + '/upload/drive/v3/files/' + encodeURIComponent(id) + '?uploadType=media&fields=id', { method: 'PATCH', headers: { 'content-type': mime }, body: new Blob([bytes]) }).then(function () {}); },
     download: function (id) { return gcall(G + '/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.arrayBuffer(); }).then(function (a) { return new Uint8Array(a); }); },
     remove: function (id) { return gcall(G + '/drive/v3/files/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {}); },
+    rename: function (id, name) { return gcall(G + '/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name }) }).then(function () {}); },
     folder: function (name) { return findRoot().then(function (r) { return folderIn(name, r); }); }
   };
 
@@ -422,7 +423,7 @@
       pieceFetch: function (h) { return sync ? sync.fetchPiece(h) : Promise.resolve({ ok: false }); },
       pieceShare: function (hs) { return sync ? sync.sharePieces(hs) : Promise.resolve({ ok: false, code: 'drive_off' }); }
     },
-    paths: function () { return { docs: 'This iPad (kept in sync with Google Drive)', dataFile: 'This iPad · Google Drive › SitCraft Backups' }; },
+    paths: function () { return { docs: 'This iPad (kept in sync with Google Drive)', dataFile: 'This iPad · Google Drive › Sitcom Garage Backups' }; },
     reveal: function () { return Promise.resolve({ ok: true }); },
     claude: {
       status: function () { return { hasKey: false, keyHint: '', model: 'claude-sonnet-5-5', secure: true }; },
@@ -465,7 +466,7 @@
       download: function (id) { return drive.download(id).then(function (b) { return { ok: true, data: K.text(b) }; }, function (e) { return { ok: false, error: e.message }; }); },
       remove: function () { return Promise.resolve(NOT_ON_IPAD); }
     },
-    // Character sheet pictures: on the iPad they go straight to Drive › SitCraft Backups › <Show> › Character sheets
+    // Character sheet pictures: on the iPad they go straight to Drive › Sitcom Garage Backups › <Show> › Character sheets
     // (the PC keeps its own copy when it next shows them). Removing is PC-only.
     pics: {
       save: function (show, file, bytes, mime, sub) {

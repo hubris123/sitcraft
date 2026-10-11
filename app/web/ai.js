@@ -1,7 +1,7 @@
-// SitCraft iPad app — AI on the iPad (opt-in on the PC). Loaded after web/bridge.js; plugs into window.sitcomDesktop.
+// Sitcom Garage iPad app — AI on the iPad (opt-in on the PC). Loaded after web/bridge.js; plugs into window.sitcomDesktop.
 //
 // Getting the keys: the PC locks ALL its keys with a one-time key and puts only that locked copy in Drive
-// ("SitCraft AI handoff.json"); the one-time key is only inside the QR code on the PC's screen. Scanning it here unlocks the
+// ("Sitcom Garage AI handoff.json"); the one-time key is only inside the QR code on the PC's screen. Scanning it here unlocks the
 // copy, checks its fingerprint, and stores the keys LOCKED on this iPad: AES-256-GCM with a fresh random IV every time,
 // using a lock key the browser creates as non-extractable (it can be used here but never read out or copied).
 // The control file then records that this iPad has the current keys ("got").
@@ -14,7 +14,7 @@
   var W = window.SC_WEB, D = window.sitcomDesktop, K = window.SC_KIT;
   if (!W || !D) return;
   var mem = W.mem, subtle = window.crypto && window.crypto.subtle;
-  var API = 'https://api.anthropic.com/v1', OA = 'https://api.openai.com/v1', HANDOFF = 'SitCraft AI handoff.json';
+  var API = 'https://api.anthropic.com/v1', OA = 'https://api.openai.com/v1', HANDOFF = 'Sitcom Garage AI handoff.json';
   var keys = null;                       // unlocked keys in memory only: { claude, openai, fp }
   var bad = mem.aiBad || {};             // per provider: 'rejected' | 'credit' (cleared after a good call)
   var listeners = [];
@@ -69,7 +69,7 @@
   function b64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
   function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
   function take(code) {
-    var kb = String(code).replace(/^SITCRAFT-AI:/i, '').trim(), sy = W.sync();
+    var kb = String(code).replace(/^(SITCOMGARAGE|SITCRAFT)-AI:/i, '').trim(), sy = W.sync();
     if (!sy) return Promise.reject(new Error('This iPad isn’t connected to your PC yet.'));
     return sy.tick().then(function () {
       var a = ctl();
@@ -128,8 +128,8 @@
         if (!v.videoWidth) return;
         var w = Math.min(640, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth); cv.width = w; cv.height = h; cx.drawImage(v, 0, 0, w, h);
         var r = window.jsQR && window.jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
-        if (r && /^SITCRAFT-AI:/i.test(r.data)) got(r.data);
-        else if (r && /^SITCRAFT-PAIR:/i.test(r.data)) msg('That’s the pairing code. On your PC choose <b>Send AI keys to the iPad</b> instead.', '#f2b33d');
+        if (r && /^(SITCOMGARAGE|SITCRAFT)-AI:/i.test(r.data)) got(r.data);
+        else if (r && /^(SITCOMGARAGE|SITCRAFT)-PAIR:/i.test(r.data)) msg('That’s the pairing code. On your PC choose <b>Send AI keys to the iPad</b> instead.', '#f2b33d');
       }, 250);
     }, function () { msg('The camera wasn’t allowed. Allow the camera for Sitcom Garage and try again.', '#f5a39b'); });
   }

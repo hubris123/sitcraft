@@ -1,4 +1,4 @@
-// SitCraft iPad app — start-up. First time: the setup screen (sign in → find your data → scan the code from your PC → name
+// Sitcom Garage iPad app — start-up. First time: the setup screen (sign in → find your data → scan the code from your PC → name
 // this iPad). After that: load the copy saved on this iPad, check Drive for anything newer, then start the normal screens.
 (function () {
   'use strict';
@@ -8,7 +8,7 @@
   var clock = function (iso) { if (!iso) return '?'; var t = new Date(iso), h = t.getHours(), m = t.getMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' AM' : ' PM'); };
   var day = function (iso) { var t = new Date(iso); return t.toLocaleString('en-US', { month: 'short' }) + ' ' + t.getDate(); };
   var who = function (d) { return d ? (d.kind === 'ipad' ? 'the iPad' : (d.name || 'your PC')) : 'your PC'; };
-  var normCode = function (s) { return String(s || '').toUpperCase().replace(/^SITCRAFT-PAIR:/, '').replace(/[^A-Z0-9]/g, ''); };
+  var normCode = function (s) { return String(s || '').toUpperCase().replace(/^(SITCOMGARAGE|SITCRAFT)-PAIR:/, '').replace(/[^A-Z0-9]/g, ''); };
 
   // ---------- setup screen ----------
   var S = { other: false, step: 1, email: '', ctl: null, code: '', name: 'iPad', err: '', busy: '', scanning: false };
@@ -49,7 +49,7 @@
     if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + ' Set it up again to use it.</div>';
     h += stepBox(1, 'Sign in with Google', S.step > 1 ? '<div class="s">Signed in' + (S.email ? ' as ' + esc(S.email) : '') + '</div>' :
       '<div class="s">Use the same Google account as Sitcom Garage on your PC. If Google says the app isn’t verified, choose <b>Advanced</b> → <b>Go to SitCraft</b>.</div><div class="row"><button class="pri" data-a="signin">Sign in with Google</button>' + (S.other || W.standalone() ? '<button data-a="signin2">Sign in another way</button>' : '') + '</div>', st(1));
-    h += stepBox(2, 'Find your Sitcom Garage data', S.step > 2 && c ? '<div class="s">Found it in Drive · <b style="color:#ecebe8">' + esc(who(c.primary).replace(/^the /, '')) + '</b> is in charge · last saved ' + esc(day(c.savedAt)) + ' at ' + esc(clock(c.savedAt)) + '</div>' : '<div class="s">Looks for the “SitCraft Backups” folder your PC keeps in Drive.</div>', st(2));
+    h += stepBox(2, 'Find your Sitcom Garage data', S.step > 2 && c ? '<div class="s">Found it in Drive · <b style="color:#ecebe8">' + esc(who(c.primary).replace(/^the /, '')) + '</b> is in charge · last saved ' + esc(day(c.savedAt)) + ' at ' + esc(clock(c.savedAt)) + '</div>' : '<div class="s">Looks for the “Sitcom Garage Backups” folder your PC keeps in Drive.</div>', st(2));
     h += stepBox(3, 'Scan the code on your PC', S.step > 3 ? '<div class="s">Code accepted</div>' : (S.step < 3 ? '<div class="s">On your PC: App settings → iPad → <b>Pair an iPad</b>.</div>' :
       '<div class="s">On your PC open App settings → iPad → <b>Pair an iPad</b>, then scan the code it shows — or type the short code under it.</div>' +
       (S.scanning ? '<video id="sc-cam" playsinline muted></video><div class="row"><button data-a="stopscan">Stop camera</button></div>' : '<div class="row"><button class="pri" data-a="scan">Scan with the camera</button></div>') +
@@ -93,7 +93,7 @@
     else if (a === 'use') finish();
   }
   function readControl() {
-    return W.findRoot().then(function () { return W.drive.find('SitCraft Control.json'); }).then(function (id) {
+    return W.findRoot().then(function () { return W.drive.find(window.SitSync.CONTROL).then(function (id) { return id || W.drive.find(window.SitSync.OLD_FILES[window.SitSync.CONTROL]); }); }).then(function (id) {
       if (!id) return null; return W.drive.download(id).then(function (b) { return JSON.parse(K.text(b)); });
     });
   }
@@ -127,7 +127,7 @@
         var w = Math.min(640, vid.videoWidth), hh = Math.round(vid.videoHeight * w / vid.videoWidth); cv.width = w; cv.height = hh;
         cx.drawImage(vid, 0, 0, w, hh);
         var img = cx.getImageData(0, 0, w, hh), r = window.jsQR && window.jsQR(img.data, w, hh, { inversionAttempts: 'dontInvert' });
-        if (r && /^SITCRAFT-PAIR:/i.test(r.data)) { clearInterval(scanTimer); scanTimer = null; S.code = normCode(r.data); checkCode(r.data); }
+        if (r && /^(SITCOMGARAGE|SITCRAFT)-PAIR:/i.test(r.data)) { clearInterval(scanTimer); scanTimer = null; S.code = normCode(r.data); checkCode(r.data); }
       }, 250);
     }, function () { set({ scanning: false, err: 'The camera wasn’t allowed — type the code instead (or allow the camera for this site and try again).' }); });
   }
