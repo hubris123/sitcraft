@@ -526,7 +526,47 @@
     return L;
   }
 
-  root.SCLink = { PLOTS: PLOTS, plotKeys: plotKeys, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
+  // ---------- Plot parts (the 10 parts of a plot, in story order) ----------
+  // Stored straight on a structure plot ({key, name, characters, want, goal, obstacle, result, …}) and on a plot idea as idea.parts.
+  // "result" is the note; "resultKind" is win / mixed / lose. Old plots' want / obstacle / result carry over as they are.
+  var PARTS = [
+    { k: 'who', label: 'Who', act: '', ph: 'Who the story is about' },
+    { k: 'want', label: 'Want', act: '', ph: 'What they want deep down' },
+    { k: 'goal', label: 'Goal', act: 'This episode', ph: 'What they try to get this episode' },
+    { k: 'obstacle', label: 'Obstacle', act: 'Act I', ph: 'What stands in the way' },
+    { k: 'plan', label: 'Plan', act: 'Act I', ph: 'How they plan to get past it' },
+    { k: 'complications', label: 'Complications', act: 'Act II', ph: 'How the plan goes wrong' },
+    { k: 'finalObstacle', label: 'Final obstacle', act: 'Act III', ph: 'The biggest wall, at the worst moment' },
+    { k: 'lastResort', label: 'Last resort', act: 'Act III', ph: 'The desperate last move' },
+    { k: 'result', label: 'Result', act: 'Act III', ph: 'A note on how it ends (optional)' },
+    { k: 'aftermath', label: 'Aftermath', act: 'Tag', ph: 'What it leaves behind (optional)', optional: true }
+  ];
+  var RESULTS = [{ k: 'win', label: 'Win' }, { k: 'mixed', label: 'Lose the goal, win the want' }, { k: 'lose', label: 'Lose' }];
+  function resultLabel(kind) { var r = RESULTS.filter(function (x) { return x.k === kind; })[0]; return r ? r.label : ''; }
+  // an old plot's free-text result that is just "Win" / "Lose" / "Lose the goal, win the want" counts as that choice
+  function resultOf(p) {
+    p = p || {}; var note = String(p.result || '').trim(), kind = RESULTS.some(function (r) { return r.k === p.resultKind; }) ? p.resultKind : '';
+    var m = RESULTS.filter(function (r) { return r.label.toLowerCase() === note.toLowerCase().replace(/[.!]+$/, ''); })[0];
+    if (m && (!kind || kind === m.k)) return { kind: m.k, note: '' };
+    return { kind: kind, note: note };
+  }
+  // the text of one part (Who falls back to the plot's characters; Result = kind + note)
+  function partText(p, k) {
+    p = p || {};
+    if (k === 'who') return String(p.who || '').trim() || (Array.isArray(p.characters) ? p.characters.join(', ') : '');
+    if (k === 'result') { var ro = resultOf(p), a = resultLabel(ro.kind), n = ro.note; return a && n ? a + ' — ' + n : (a || n); }
+    return String(p[k] || '').trim();
+  }
+  function partsFilled(p) { return PARTS.filter(function (x) { return !!partText(p, x.k); }).length; }
+  // a copy of the parts only (for copying an idea's parts onto a structure plot)
+  function partsCopy(p) { var o = {}; p = p || {}; PARTS.forEach(function (x) { if (p[x.k]) o[x.k] = String(p[x.k]); }); if (RESULTS.some(function (r) { return r.k === p.resultKind; })) o.resultKind = p.resultKind; return o; }
+  // lines for Claude's prompts (only the filled parts)
+  function partsForPrompt(p, indent) {
+    var pre = indent || '  ';
+    return PARTS.filter(function (x) { return !!partText(p, x.k); }).map(function (x) { return pre + x.label + (x.act ? ' (' + x.act + ')' : '') + ': ' + partText(p, x.k); });
+  }
+
+  root.SCLink = { PLOTS: PLOTS, PARTS: PARTS, RESULTS: RESULTS, resultLabel: resultLabel, resultOf: resultOf, partText: partText, partsFilled: partsFilled, partsCopy: partsCopy, partsForPrompt: partsForPrompt, plotKeys: plotKeys, cleanPlot: cleanPlot, splitChars: splitChars, inUse: inUse, timeline: timeline, mirror: mirror, bump: bump, patch: patch, setPlots: setPlots, setNotes: setNotes, addJoke: addJoke, removeJoke: removeJoke, jokeUses: jokeUses, usesLabel: usesLabel, notesForPrompt: notesForPrompt,
     use: use, adopt: adopt, fromStruct: fromStruct, toStruct: toStruct, suggestByCast: suggestByCast, claudePrompt: claudePrompt, readClaude: readClaude,
     COL: COL, LAB: LAB, assignOpen: assignOpen, assignVals: assignVals,
     parseHeading: parseHeading, parse: parse, ensure: ensure, pace: pace, rates: rates, estimate: estimate, applyEstimate: applyEstimate, scriptLinked: scriptLinked, pair: pair, fromScript: fromScript, toScript: toScript,

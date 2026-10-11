@@ -247,7 +247,7 @@
     var c = cfg(), key = keys.openai, model = c.openaiModel || ((c.openaiModels || [])[0] || {}).id;
     if (!model) return Promise.resolve({ error: { code: 'bad_model' } });
     var ctl = new AbortController(); running[id] = ctl;
-    var body = { model: model, input: String(prompt), stream: true, store: false, instructions: 'You punch up jokes for a sitcom writing app. Reply with exactly one valid JSON object and nothing else.', text: { format: { type: 'json_object' } }, max_output_tokens: /^gpt-4/.test(model) ? 16000 : 32000 };
+    var body = { model: model, input: String(prompt), stream: true, store: false, instructions: 'You help write a sitcom in a sitcom writing app (joke punch-ups, plot parts). Reply with exactly one valid JSON object and nothing else.', text: { format: { type: 'json_object' } }, max_output_tokens: /^gpt-4/.test(model) ? 16000 : 32000 };
     if (/^gpt-([5-9]|\d{2})/.test(model)) body.reasoning = { effort: 'medium' };
     return oaOnce(id, key, body, ctl).then(function (res) {
       if (res.error && res.error.code === 'bad_request') {
