@@ -26,7 +26,17 @@
     // → { on, salt, hash, it, at } to keep in the data (the minutes setting is kept alongside)
     make: function (pin) { var s = salt(); return fp(pin, s, IT).then(function (h) { return { on: true, v: 1, salt: s, hash: h, it: IT, at: new Date().toISOString() }; }); },
     check: function (pin, rec) { if (!rec || !rec.hash || !api.ok(pin)) return Promise.resolve(false); return fp(pin, rec.salt, rec.it || IT).then(function (h) { return h === rec.hash; }); },
-    isOn: function (rec) { return !!(rec && rec.on && rec.hash); }
+    isOn: function (rec) { return !!(rec && rec.on && rec.hash); },
+    // A new PIN typed twice → what to show under the boxes, and whether the button may be used:
+    //   both empty → yellow "No PIN chosen yet" · still typing → grey "6 digits" · second full but different → red
+    //   "PINs don't match" · same → green "✓ PINs match" (the button turns green and pulses)
+    pair: function (a, b) {
+      a = String(a || ''); b = String(b || '');
+      if (!a && !b) return { state: 'empty', text: 'No PIN chosen yet — type a 6-digit PIN in both boxes.', color: '#f2b33d', ready: false };
+      if (b.length === 6 && a !== b) return { state: 'mismatch', text: 'PINs don’t match.', color: '#f5a39b', ready: false };
+      if (api.ok(a) && a === b) return { state: 'match', text: '✓ PINs match', color: '#2ec4b0', ready: true };
+      return { state: 'typing', text: a.length < 6 ? '6 digits' : 'Type the same 6 digits again.', color: '#8d9098', ready: false };
+    }
   };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.SCAppLock = api;
 })(typeof window !== 'undefined' ? window : this);
