@@ -86,6 +86,7 @@
     }
     if (node.nodeType !== 1) return null;
     var tag = node.tagName.toLowerCase();
+    if (tag === 'template' && node.getAttribute('data-dc-tag')) tag = node.getAttribute('data-dc-tag');
     if (tag === 'helmet') { ctx.helmet.push(node.innerHTML); return null; }
     if (tag === 'script') return null;
     if (tag === 'sc-for') {
@@ -133,7 +134,12 @@
   }
   function register(name, src) {
     // src: { template: '<x-dc>…</x-dc> inner HTML', code: 'class Component extends DCLogic {…}' }
-    var tpl = document.createElement('template'); tpl.innerHTML = src.template;
+    // Safari's HTML parser throws away unknown tags inside <select> (so <sc-for> option lists came out empty on the
+    // iPad). A <template> is allowed there, so inside selects <sc-for>/<sc-if> travel as <template data-dc-tag="…">.
+    var html = String(src.template).replace(/<select\b[\s\S]*?<\/select>/g, function (sel) {
+      return sel.replace(/<sc-(for|if)\b/g, '<template data-dc-tag="sc-$1"').replace(/<\/sc-(for|if)>/g, '</template>');
+    });
+    var tpl = document.createElement('template'); tpl.innerHTML = html;
     var ctx = { helmet: [] };
     var render = compileChildren(tpl.content.childNodes, ctx);
     var Cls;
