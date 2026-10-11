@@ -1,4 +1,4 @@
-// "Working on it" for every slow button, everywhere in SitCraft (PC and iPad).
+// "Working on it" for every slow button, everywhere in Sitcom Garage (PC and iPad).
 // Everything slow (Google Drive, AI, sync, backups, printing, the delete lock…) goes through window.sitcomDesktop. This wraps
 // it: when a button press starts one of those calls and it's still running after a moment, that button is greyed out with
 // a green spinning circle over it, and further presses on it are ignored until the call finishes.

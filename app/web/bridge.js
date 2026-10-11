@@ -21,7 +21,7 @@
       r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
     });
   }
-  // Ask the iPad to keep SitCraft's storage for good (Safari may otherwise clear a website's storage after weeks unused)
+  // Ask the iPad to keep Sitcom Garage's storage for good (Safari may otherwise clear a website's storage after weeks unused)
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}
   function loadAll() {
     return idb().then(function (d) {
@@ -58,7 +58,7 @@
     return function (email) { logSign('got', { how: how, mins: mins, email: email || '' }); };
   }
   // ---------------- Google sign-in ----------------
-  // Google gives a web app 1-hour passes. The SitCraft sign-in helper (a Cloudflare Worker that keeps the Google secret,
+  // Google gives a web app 1-hour passes. The Sitcom Garage sign-in helper (a Cloudflare Worker that keeps the Google secret,
   // dev-tools/cloudflare/sitcraft-signin.js) turns one sign-in into a long-lasting "refresh" pass, kept here locked with
   // a key that can't be copied out of this iPad, and renews the 1-hour pass quietly whenever it runs out.
   var HELPER = 'https://sitcraft-signin.mvavrick.workers.dev';
@@ -442,7 +442,7 @@
       },
       upload: function () { return Promise.resolve({ ok: false, code: 'pc_only' }); },
       read: function (show, file, id) {
-        if (!id) return Promise.resolve({ ok: false, error: 'This picture is still only on your PC — open SitCraft on the PC (with Drive on) to send it.' });
+        if (!id) return Promise.resolve({ ok: false, error: 'This picture is still only on your PC — open Sitcom Garage on the PC (with Drive on) to send it.' });
         if (picCache[id]) return Promise.resolve({ ok: true, bytes: picCache[id].bytes, mime: picCache[id].mime });
         var mime = /\.png$/i.test(file) ? 'image/png' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg';
         return drive.download(id).then(function (b) { picCache[id] = { bytes: b, mime: mime }; return { ok: true, bytes: b, mime: mime }; }, function (e) { return { ok: false, code: e.code || 'drive_error', error: e.message }; });

@@ -1,4 +1,4 @@
-/* SitCraft — desktop runtime for the app's screen files (.dc.html).
+/* Sitcom Garage — desktop runtime for the app's screen files (.dc.html).
  * Each screen is an HTML template with {{holes}}, <sc-for>, <sc-if>, <dc-import>, <helmet>
  * plus a `class Component extends DCLogic { renderVals() {...} }` script.
  * This renders them with Preact so the same screen files run in the desktop app.

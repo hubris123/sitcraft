@@ -6,18 +6,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="SitCraft">
+<meta name="apple-mobile-web-app-title" content="Sitcom Garage">
 <meta name="theme-color" content="#0f1013">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="web/icons/icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="web/icons/icon-192.png">
-<title>SitCraft</title>
+<link rel="icon" type="image/svg+xml" href="brand/mark.svg">
+<title>Sitcom Garage</title>
 <link rel="stylesheet" href="vendor/fonts.css">
 <link rel="stylesheet" href="web/ipad.css">
 <style>/* Only text you can type in can be selected (stops stray highlighting and the iPad's copy pop-up, which also broke dragging) */html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}input,textarea,select,[contenteditable],[contenteditable] *,.sel-ok,.sel-ok *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}html,body{margin:0;height:100%;background:#0f1013;color:#ecebe8;font-family:Geist,system-ui,sans-serif;-webkit-text-size-adjust:100%}#app{height:100%}
-#sc-loading{position:fixed;inset:0;display:grid;place-items:center;font-size:15px;color:#8d9098}
-/* SitCraft on the iPad is landscape only: held upright, the screens are covered with a "turn sideways" note */
+#sc-loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;font-size:15px;color:#8d9098;background:#0f1013}#sc-loading img{width:min(380px,60vw);height:auto;animation:scIn .7s ease-out both}#sc-loading .bars{display:flex;gap:6px}#sc-loading .bars i{width:34px;height:6px;border-radius:3px;opacity:.25;animation:scPulse 1.2s ease-in-out infinite}#sc-loading .bars i:nth-child(2){animation-delay:.2s}#sc-loading .bars i:nth-child(3){animation-delay:.4s}@keyframes scIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}@keyframes scPulse{50%{opacity:1}}@media (prefers-reduced-motion:reduce){#sc-loading img,#sc-loading .bars i{animation:none;opacity:1}}
+/* Sitcom Garage on the iPad is landscape only: held upright, the screens are covered with a "turn sideways" note */
 #sc-turn{display:none}
 @media (orientation: portrait) and (max-width: 1100px){
   #sc-turn{display:flex;position:fixed;inset:0;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#0f1013;color:#ecebe8;text-align:center;padding:24px}
@@ -26,8 +27,8 @@
 }</style>
 </head>
 <body>
-<div id="app"><div id="sc-loading">Opening SitCraft…</div></div>
-<div id="sc-turn" role="alert"><svg viewBox="0 0 96 96" fill="none" stroke="#ecebe8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="30" y="14" width="36" height="56" rx="6" opacity=".35"/><rect x="14" y="40" width="68" height="44" rx="6"/><path d="M72 22c8 3 12 9 12 16"/><path d="M80 36l4 4 4-6"/></svg><b>Turn your iPad sideways</b><span>SitCraft is designed for landscape. Your work is safe — it’s right where you left it.</span></div>
+<div id="app"><div id="sc-loading"><img src="brand/logo.svg" alt="Sitcom Garage — Sitcom Creative Suite"><span class="bars" aria-hidden="true"><i style="background:#5b8def"></i><i style="background:#3dbb85"></i><i style="background:#f0675a"></i></span><span>Opening Sitcom Garage…</span></div></div>
+<div id="sc-turn" role="alert"><svg viewBox="0 0 96 96" fill="none" stroke="#ecebe8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="30" y="14" width="36" height="56" rx="6" opacity=".35"/><rect x="14" y="40" width="68" height="44" rx="6"/><path d="M72 22c8 3 12 9 12 16"/><path d="M80 36l4 4 4-6"/></svg><b>Turn your iPad sideways</b><span>Sitcom Garage is designed for landscape. Your work is safe — it’s right where you left it.</span></div>
 <script src="vendor/preact.min.umd.js"></script>
 <script src="web/vendor/pako.min.js"></script>
 <script src="web/vendor/jsQR.js"></script>

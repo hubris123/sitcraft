@@ -41,15 +41,15 @@
     css();
     var app = document.getElementById('app');
     if (!root) { root = document.createElement('div'); root.id = 'sc-setup'; app.innerHTML = ''; app.appendChild(root); }
-    // Opened in Safari/Chrome (not from the Home Screen): first ask to add SitCraft to the Home Screen — the Home Screen app
+    // Opened in Safari/Chrome (not from the Home Screen): first ask to add Sitcom Garage to the Home Screen — the Home Screen app
     // keeps its own storage, so setting up in the browser would only have to be done again there.
     if (!W.standalone() && !mem.homeSkip && S.step === 1 && !S.busy) { root.innerHTML = homeCard(); root.querySelector('[data-a="here"]').onclick = function () { W.persist('homeSkip', { at: Date.now() }); render(); }; return; }
     var st = function (n) { return S.step > n ? 'done' : (S.step === n ? 'cur' : 'todo'); };
-    var c = S.ctl, h = '<div class="card"><div><h1>Set up SitCraft on this iPad</h1><div class="sub">Your shows come from your own Google Drive. Your PC stays the home base.</div></div>';
+    var c = S.ctl, h = '<div class="card"><div><h1>Set up Sitcom Garage on this iPad</h1><div class="sub">Your shows come from your own Google Drive. Your PC stays the home base.</div></div>';
     if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + ' Set it up again to use it.</div>';
     h += stepBox(1, 'Sign in with Google', S.step > 1 ? '<div class="s">Signed in' + (S.email ? ' as ' + esc(S.email) : '') + '</div>' :
-      '<div class="s">Use the same Google account as SitCraft on your PC. If Google says the app isn’t verified, choose <b>Advanced</b> → <b>Go to SitCraft</b>.</div><div class="row"><button class="pri" data-a="signin">Sign in with Google</button>' + (S.other || W.standalone() ? '<button data-a="signin2">Sign in another way</button>' : '') + '</div>', st(1));
-    h += stepBox(2, 'Find your SitCraft data', S.step > 2 && c ? '<div class="s">Found it in Drive · <b style="color:#ecebe8">' + esc(who(c.primary).replace(/^the /, '')) + '</b> is in charge · last saved ' + esc(day(c.savedAt)) + ' at ' + esc(clock(c.savedAt)) + '</div>' : '<div class="s">Looks for the “SitCraft Backups” folder your PC keeps in Drive.</div>', st(2));
+      '<div class="s">Use the same Google account as Sitcom Garage on your PC. If Google says the app isn’t verified, choose <b>Advanced</b> → <b>Go to SitCraft</b>.</div><div class="row"><button class="pri" data-a="signin">Sign in with Google</button>' + (S.other || W.standalone() ? '<button data-a="signin2">Sign in another way</button>' : '') + '</div>', st(1));
+    h += stepBox(2, 'Find your Sitcom Garage data', S.step > 2 && c ? '<div class="s">Found it in Drive · <b style="color:#ecebe8">' + esc(who(c.primary).replace(/^the /, '')) + '</b> is in charge · last saved ' + esc(day(c.savedAt)) + ' at ' + esc(clock(c.savedAt)) + '</div>' : '<div class="s">Looks for the “SitCraft Backups” folder your PC keeps in Drive.</div>', st(2));
     h += stepBox(3, 'Scan the code on your PC', S.step > 3 ? '<div class="s">Code accepted</div>' : (S.step < 3 ? '<div class="s">On your PC: App settings → iPad → <b>Pair an iPad</b>.</div>' :
       '<div class="s">On your PC open App settings → iPad → <b>Pair an iPad</b>, then scan the code it shows — or type the short code under it.</div>' +
       (S.scanning ? '<video id="sc-cam" playsinline muted></video><div class="row"><button data-a="stopscan">Stop camera</button></div>' : '<div class="row"><button class="pri" data-a="scan">Scan with the camera</button></div>') +
@@ -70,9 +70,9 @@
     var ua = navigator.userAgent || '', chrome = /CriOS|EdgiOS|FxiOS/.test(ua), name = /EdgiOS/.test(ua) ? 'Edge' : (/FxiOS/.test(ua) ? 'Firefox' : (chrome ? 'Chrome' : 'Safari'));
     var share = '<b>Share</b> button (a square with an arrow pointing up)';
     var steps = chrome ?
-      [['Tap the ' + share, 'It’s at the right end of the address bar. (No Share button? Tap ⋯ and choose <b>Share…</b>.)'], ['Scroll down and tap <b>Add to Home Screen</b>', 'It’s in the list of actions under the row of apps.'], ['Tap <b>Add</b>', 'The SitCraft icon appears on your Home Screen.'], ['Open SitCraft from the new icon', 'Set it up there — sign in and scan the code from your PC.']] :
-      [['Tap the ' + share, 'It’s at the top of the screen, next to the address bar.'], ['Tap <b>Add to Home Screen</b>', 'Scroll down the list if you don’t see it.'], ['Tap <b>Add</b>', 'The SitCraft icon appears on your Home Screen.'], ['Open SitCraft from the new icon', 'Set it up there — sign in and scan the code from your PC.']];
-    var h = '<div class="card"><div><h1>First, add SitCraft to your Home Screen</h1><div class="sub">SitCraft then opens like an app: full screen with no browser bars, it works without internet, and your work is kept safe on this iPad. (A Home Screen app keeps its own storage, so set it up there rather than here in ' + name + '.)</div></div>';
+      [['Tap the ' + share, 'It’s at the right end of the address bar. (No Share button? Tap ⋯ and choose <b>Share…</b>.)'], ['Scroll down and tap <b>Add to Home Screen</b>', 'It’s in the list of actions under the row of apps.'], ['Tap <b>Add</b>', 'The Sitcom Garage icon appears on your Home Screen.'], ['Open Sitcom Garage from the new icon', 'Set it up there — sign in and scan the code from your PC.']] :
+      [['Tap the ' + share, 'It’s at the top of the screen, next to the address bar.'], ['Tap <b>Add to Home Screen</b>', 'Scroll down the list if you don’t see it.'], ['Tap <b>Add</b>', 'The Sitcom Garage icon appears on your Home Screen.'], ['Open Sitcom Garage from the new icon', 'Set it up there — sign in and scan the code from your PC.']];
+    var h = '<div class="card"><div><h1>First, add Sitcom Garage to your Home Screen</h1><div class="sub">Sitcom Garage then opens like an app: full screen with no browser bars, it works without internet, and your work is kept safe on this iPad. (A Home Screen app keeps its own storage, so set it up there rather than here in ' + name + '.)</div></div>';
     if (mem.unpaired) h += '<div class="sub" style="color:#f2b33d">' + (mem.unpaired.removed ? 'This iPad was removed on your PC, so it forgot your shows.' : 'This iPad was disconnected' + (mem.unpaired.by ? ' because “' + esc(mem.unpaired.by) + '” was paired instead' : '') + '.') + '</div>';
     steps.forEach(function (x, i) { h += stepBox(i + 1, x[0], '<div class="s">' + x[1] + '</div>', i === 0 ? 'cur' : 'todo'); });
     h += '<div class="row" style="justify-content:flex-end"><button data-a="here" style="font-size:14px;min-height:44px;color:#9a9ca3;border-color:#2a2e36">Set up here in ' + name + ' instead</button></div></div>';
@@ -84,7 +84,7 @@
       set({ err: '', busy: 'Waiting for Google…' });
       W.signIn(false).then(function (r) {
         if (!r.ok) return set({ busy: '', other: true, err: 'Google sign-in didn’t finish: ' + r.error + '. If no window opened, try “Sign in another way”.' });
-        set({ email: r.email, step: 2, busy: 'Looking for your SitCraft data…' }); findData();
+        set({ email: r.email, step: 2, busy: 'Looking for your Sitcom Garage data…' }); findData();
       });
     } else if (a === 'signin2') { set({ err: '', busy: 'Opening Google…' }); W.signInRedirect(false); }
     else if (a === 'scan') set({ scanning: true, err: '' });
@@ -99,7 +99,7 @@
   }
   function findData() {
     readControl().then(function (c) {
-      if (!c) return set({ busy: '', err: 'Your SitCraft folder is there, but Drive sync isn’t switched on yet. On your PC: App settings → iPad → turn on Drive sync, then tap Sign in again.', step: 1 });
+      if (!c) return set({ busy: '', err: 'Your Sitcom Garage folder is there, but Drive sync isn’t switched on yet. On your PC: App settings → iPad → turn on Drive sync, then tap Sign in again.', step: 1 });
       set({ ctl: c, step: 3, busy: '' });
     }, function (e) { set({ busy: '', step: 1, err: e.code === 'no_data' ? e.message : 'Couldn’t read Google Drive: ' + e.message }); });
   }
@@ -186,10 +186,10 @@
     if (!reg || !reg.waiting) return;
     if (!mounted && !root) return applyUpdate(reg); // still starting up: nothing open, switch now
     if (document.getElementById('sc-update')) return;
-    var b = $('<button id="sc-update" style="position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px, env(safe-area-inset-bottom));z-index:60;font:600 14px Geist,system-ui,sans-serif;border-radius:999px;padding:10px 16px;min-height:44px;border:1px solid #3c3360;background:#1c1830;color:#cfc3fb;box-shadow:0 10px 30px rgba(0,0,0,.5)">New version of SitCraft ready — tap to update</button>');
+    var b = $('<button id="sc-update" style="position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px, env(safe-area-inset-bottom));z-index:60;font:600 14px Geist,system-ui,sans-serif;border-radius:999px;padding:10px 16px;min-height:44px;border:1px solid #3c3360;background:#1c1830;color:#cfc3fb;box-shadow:0 10px 30px rgba(0,0,0,.5)">New version of Sitcom Garage ready — tap to update</button>');
     b.onclick = function () { if (b.disabled) return; barBusy(b, 'Updating…'); applyUpdate(reg); };
     document.body.appendChild(b);
-    // Or quietly, the next time you switch away from SitCraft (it restarts on the new version while it's out of sight)
+    // Or quietly, the next time you switch away from Sitcom Garage (it restarts on the new version while it's out of sight)
     var away = function () { if (document.visibilityState !== 'hidden') return; document.removeEventListener('visibilitychange', away); applyUpdate(reg); };
     document.addEventListener('visibilitychange', away);
   }
@@ -226,7 +226,7 @@
   W.ready.then(function () { return W.redirected; }).then(function (back) {
     if (!mem.device || !mem[W.DATA_KEY]) {
       // setting up: carry on after coming back from Google's sign-in page
-      if (back && back.ok) { set({ email: back.email, step: 2, busy: 'Looking for your SitCraft data…' }); return findData(); }
+      if (back && back.ok) { set({ email: back.email, step: 2, busy: 'Looking for your Sitcom Garage data…' }); return findData(); }
       if (back) S.err = 'Google sign-in didn’t finish: ' + back.error + '.';
       if (back) S.other = true;
       return render();

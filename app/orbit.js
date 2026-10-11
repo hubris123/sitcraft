@@ -1,10 +1,10 @@
-// SitCraft's "working on it" spinner: three dots orbiting a tilted ring in 3D (bigger and brighter in front, smaller and
+// Sitcom Garage's "working on it" spinner: three dots orbiting a tilted ring in 3D (bigger and brighter in front, smaller and
 // dimmer behind). It slowly blends through six looks (glow → comet tails → ease in and out → brand gradient → faint ring →
 // leader and followers, 2 s each, a 12 s cycle) while the whole ring sways a little on both axes. Each spinner starts at a
 // random point in the cycle, so short waits don't always look the same.
 // It replaces every old spinning circle automatically: any element with class "spin" (the screens) or "sc-spin" (the
 // iPad's setup screen, bars and renderer/busy.js) gets the orbit drawn in it. The dot colour comes from the element's own
-// border-top-color, so warning spinners stay amber; plain grey/white ones become SitCraft green.
+// border-top-color, so warning spinners stay amber; plain grey/white ones become Sitcom Garage green.
 (function () {
   'use strict';
   if (typeof window === 'undefined' || window.SitOrbit) return;
@@ -35,7 +35,7 @@
     if (c[0] === '#') rgb = [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
     else { var m = c.match(/[\d.]+/g); rgb = m ? [+m[0], +m[1], +m[2]] : TEAL; }
     var mx = Math.max.apply(null, rgb), mn = Math.min.apply(null, rgb);
-    return mx - mn < 40 ? TEAL : rgb;           // grey/white → SitCraft green; real colours (amber warnings, teal) kept
+    return mx - mn < 40 ? TEAL : rgb;           // grey/white → Sitcom Garage green; real colours (amber warnings, teal) kept
   }
   function draw(h, now) {
     var el = h.el, cv = h.cv, x = h.ctx;

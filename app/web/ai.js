@@ -131,7 +131,7 @@
         if (r && /^SITCRAFT-AI:/i.test(r.data)) got(r.data);
         else if (r && /^SITCRAFT-PAIR:/i.test(r.data)) msg('That’s the pairing code. On your PC choose <b>Send AI keys to the iPad</b> instead.', '#f2b33d');
       }, 250);
-    }, function () { msg('The camera wasn’t allowed. Allow the camera for SitCraft and try again.', '#f5a39b'); });
+    }, function () { msg('The camera wasn’t allowed. Allow the camera for Sitcom Garage and try again.', '#f5a39b'); });
   }
   function open() {
     css(); close();

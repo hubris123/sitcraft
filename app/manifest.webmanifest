@@ -1,7 +1,7 @@
 {
-  "name": "SitCraft",
-  "short_name": "SitCraft",
-  "description": "Write your sitcom on the iPad — kept in sync with SitCraft on your PC.",
+  "name": "Sitcom Garage",
+  "short_name": "Sitcom Garage",
+  "description": "Write your sitcom on the iPad — kept in sync with Sitcom Garage on your PC.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

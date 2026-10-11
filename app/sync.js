@@ -1,4 +1,4 @@
-// SitCraft — Drive sync: one device in charge ("primary") at a time, the others view only.
+// Sitcom Garage — Drive sync: one device in charge ("primary") at a time, the others view only.
 // Everything travels through the writer's own Google Drive folder "SitCraft Backups":
 //   SitCraft Control.json      — who is in charge, the data version, a heartbeat, a handoff request, the history log (tiny; checked often)
 //   SitCraft Live Index.json   — the list of pieces that make up the live copy, each with a fingerprint
@@ -350,7 +350,7 @@ function createSync(o) {
     status(true);
   }
 
-  // Turn sync on. If Drive already has SitCraft data from another device, this device starts as viewer
+  // Turn sync on. If Drive already has Sitcom Garage data from another device, this device starts as viewer
   // (its own copy is kept as a rescued backup first if it differs).
   const enable = () => run(async () => {
     save({ syncOn: true });

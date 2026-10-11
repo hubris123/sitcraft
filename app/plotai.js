@@ -11,7 +11,7 @@
     var co = who === 'ChatGPT' ? 'OpenAI' : 'Anthropic';
     var M = {
       no_key: who + ' isn’t set up on this device yet. Add it in App settings → AI.', not_granted: who + ' isn’t set up on this device yet. Add it in App settings → AI.',
-      bad_model: 'No ChatGPT model is picked yet. Open App settings → AI → ChatGPT.', oa_proto: 'ChatGPT works in the SitCraft app (not in this preview).',
+      bad_model: 'No ChatGPT model is picked yet. Open App settings → AI → ChatGPT.', oa_proto: 'ChatGPT works in the Sitcom Garage app (not in this preview).',
       needs_verify: 'OpenAI asks you to verify your organization first (OpenAI Platform → Settings → Organization).',
       no_credit: who + '’s account is out of credit. Add credits in the ' + (who === 'ChatGPT' ? 'OpenAI Platform (Settings → Billing)' : 'Claude Console (Billing)') + ', then try again.',
       rate_limited: who + ' is busy or your usage limit was reached. Wait a moment, then try again.',
