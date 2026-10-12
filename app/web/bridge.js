@@ -423,6 +423,37 @@
       pieceFetch: function (h) { return sync ? sync.fetchPiece(h) : Promise.resolve({ ok: false }); },
       pieceShare: function (hs) { return sync ? sync.sharePieces(hs) : Promise.resolve({ ok: false, code: 'drive_off' }); }
     },
+    // About: which version this iPad runs, and Check for updates (the app files live in web/sw.js's offline copy)
+    app: {
+      info: function () {
+        return new Promise(function (res) {
+          var sw = navigator.serviceWorker, c = sw && sw.controller, done = false;
+          if (!c) { res({ kind: 'ipad', build: '' }); return; }
+          var h = function (e) { if (e.data && e.data.build && !done) { done = true; sw.removeEventListener('message', h); res({ kind: 'ipad', build: e.data.build }); } };
+          sw.addEventListener('message', h); c.postMessage('build');
+          setTimeout(function () { if (!done) { done = true; sw.removeEventListener('message', h); res({ kind: 'ipad', build: '' }); } }, 2500);
+        });
+      },
+      // → { status: 'current' | 'updating' | 'offline' | 'error', latest: {build, at} }. 'updating': your work is saved first,
+      // then the app restarts on the new version by itself.
+      check: function () {
+        if (!navigator.onLine) return Promise.resolve({ status: 'offline' });
+        var W = window.SC_WEB || {}, reg = W.sw && W.sw.reg, self = D.app;
+        return Promise.all([self.info(), fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); })]).then(function (x) {
+          var cur = x[0].build, latest = x[1] || {};
+          if (cur && latest.build === cur) return { status: 'current', latest: latest };
+          if (!reg) return { status: 'error', latest: latest };
+          return reg.update().then(function () {
+            return new Promise(function (res) {
+              var tries = 0, t = setInterval(function () {
+                if (reg.waiting) { clearInterval(t); W.applyUpdate(); res({ status: 'updating', latest: latest }); }
+                else if (++tries > 60) { clearInterval(t); res({ status: cur ? 'error' : 'current', latest: latest }); }
+              }, 500);
+            });
+          });
+        }).catch(function () { return { status: 'error' }; });
+      }
+    },
     paths: function () { return { docs: 'This iPad (kept in sync with Google Drive)', dataFile: 'This iPad · Google Drive › Sitcom Garage Backups' }; },
     reveal: function () { return Promise.resolve({ ok: true }); },
     claude: {

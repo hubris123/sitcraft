@@ -221,6 +221,7 @@
     vv.addEventListener('scroll', soon); vv.addEventListener('resize', soon); window.addEventListener('scroll', soon, true);
   })();
   W.sw = { had: false, reg: null };
+  W.applyUpdate = function () { var reg = W.sw.reg; if (reg && reg.waiting) { applyUpdate(reg); return true; } return false; };
   offlineSetup();
   function mountApp() { window.DC.mount('App', document.getElementById('app'), {}); W.booted(); mounted = true; }
   W.ready.then(function () { return W.redirected; }).then(function (back) {
